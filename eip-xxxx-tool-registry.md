@@ -13,47 +13,17 @@ requires: 165, 721, 1155, 5643
 
 ## Abstract
 
-This ERC defines an onchain registry standard for AI agent tools. This standard is the tool-layer counterpart to [ERC-8004 (Trustless Agents)](https://eips.ethereum.org/EIPS/eip-8004). Where ERC-8004 standardizes agent identity, reputation, and validation, this standard enables agents to discover and access tools through a shared onchain registry.
-
-The standard introduces three access modes: **open** (anyone can invoke), **NFT-gated** (requires holding a specific ERC-721 or ERC-1155 token), and **subscription** (requires an active [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) subscription NFT). Any access mode can be free or paid; pricing is independent of access control. Each registered tool has a metadata URI pointing to a standardized Tool Registration File describing its endpoint, input/output schemas, pricing, payment protocols, and access configuration.
-
-The standard is gateway-agnostic and protocol-agnostic: it defines the registry and metadata format, not how tools are invoked or paid for. Any gateway, agent framework ([MCP](https://modelcontextprotocol.io/), A2A, etc.), or payment protocol ([x402](https://github.com/coinbase/x402), etc.) can integrate with the registry.
+This ERC defines an onchain registry for AI agent tools — the tool-layer counterpart to [ERC-8004 (Trustless Agents)](https://eips.ethereum.org/EIPS/eip-8004). Each registered tool has a unique onchain ID, an access mode (**open**, **NFT-gated** via ERC-721/ERC-1155, or **subscription** via [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643)), and a metadata URI pointing to a standardized JSON manifest describing the tool's endpoint, I/O schemas, pricing, and access configuration. Any access mode can be free or paid; pricing is independent of access control.
 
 ## Motivation
 
-ERC-8004 provides Identity, Reputation, and Validation registries for agents. However, there is no equivalent standard for the *tools* that agents invoke. As the AI agent ecosystem matures, agents need a standardized way to:
-
-### Discover Tools Onchain
-
-Tool discovery is currently fragmented across proprietary APIs, documentation sites, and marketplace-specific catalogs. A shared onchain registry with metadata URIs pointing to standardized manifests (capabilities, pricing, input/output schemas, endpoint URLs) enables universal tool discovery by any agent framework.
-
-### Gate Access with Flexible Models
-
-Not all tools need NFT gating. An **open** mode enables an open tool economy where any agent can invoke any tool with free or paid per-invocation pricing. **NFT-gated** mode supports binding any existing ERC-721/ERC-1155 collection, enabling holders to access tools without changes to the original contract. Access passes can also be newly minted (tradeable or soulbound). NFT-gated tools may additionally charge per invocation. **Subscription** mode uses [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) subscription NFTs for time-limited access with automatic revocation on expiration. Any mode can be free (no `pricing` object) or paid.
-
-### Preserve Creator Control
-
-Creators deploy tools on their own infrastructure. The standard does not specify a runtime, only an endpoint URL and manifest schema. Creators retain full control over their code, scaling, and hosting choices.
-
-### Interoperate Across Agent Frameworks
-
-Tools registered onchain can be discovered and invoked by any agent framework (MCP, A2A, or future protocols). The standard does not prescribe a specific agent-to-tool communication protocol or payment mechanism; it standardizes the registry and access layer that all protocols can build upon.
+ERC-8004 standardizes agent identity, reputation, and validation — but there is no equivalent standard for the *tools* agents invoke. Tool discovery is fragmented across proprietary APIs and documentation sites. This ERC fills that gap with an onchain registry that provides: universal tool discovery via metadata URIs and standardized manifests; flexible access control (open, NFT-gated, or subscription); creator-hosted endpoints with no prescribed runtime; and interoperability across agent frameworks (MCP, A2A, etc.) and payment protocols (x402, etc.).
 
 ## Specification
 
 The key words “MUST”, “MUST NOT”, “REQUIRED”, “SHALL”, “SHALL NOT”, “SHOULD”, “SHOULD NOT”, “RECOMMENDED”, “NOT RECOMMENDED”, “MAY”, and “OPTIONAL” in this document are to be interpreted as described in RFC 2119 and RFC 8174.
 
-### Overview
-
-The standard defines two onchain interfaces and one metadata format:
-
-1. **Tool Identity Registry** (`IToolRegistry`) — Onchain registry where creators register tools, each assigned a unique ID with a metadata URI and access mode.
-2. **Tool Registration File** — JSON metadata document (resolved from `metadataURI`) describing the tool’s endpoint, I/O schemas, pricing, and access configuration.
-3. **Tool Access Registry** (`IToolAccessRegistry`) — NFT-based access gating. For `OPEN` tools, access is unconditional. For `NFT_GATED` tools, the caller must hold a token from a bound collection. For `SUBSCRIPTION` tools, the caller must hold a subscription NFT ([ERC-5643](https://eips.ethereum.org/EIPS/eip-5643)) that has not expired.
-
 ### 1. Tool Identity Registry
-
-The Tool Identity Registry is the core interface. Each tool gets a unique onchain ID with a metadata URI pointing to its Tool Registration File.
 
 #### Types
 
@@ -165,7 +135,7 @@ interface IToolRegistry /* is IERC165 */ {
 
 ### 2. Tool Registration File
 
-The `metadataURI` in `ToolConfig` MUST resolve to a JSON document conforming to the Tool Registration File schema. This is analogous to ERC-8004’s Agent Registration File, serving as the manifest that describes a tool’s capabilities and configuration.
+The `metadataURI` in `ToolConfig` MUST resolve to a JSON document conforming to the schema below.
 
 #### Required Fields
 
@@ -193,9 +163,7 @@ The `metadataURI` in `ToolConfig` MUST resolve to a JSON document conforming to 
 
 #### Pricing Object
 
-When present, the `pricing` object describes the tool’s cost and accepted payment protocols. All amounts MUST be specified in the token’s smallest unit. For example, 0.02 USDC (6 decimals) is `"20000"`, and 0.01 ETH (18 decimals) is `"10000000000000000"`. This follows the convention established by [ERC-20](https://eips.ethereum.org/EIPS/eip-20), [ERC-2981](https://eips.ethereum.org/EIPS/eip-2981), and [Seaport](https://github.com/ProjectOpenSea/seaport), where all amounts are raw `uint256` values and `decimals()` is display-only.
-
-The `token` field MUST be the ERC-20 contract address of the payment token on the specified chain. The `chainId` field MUST be the [EIP-155](https://eips.ethereum.org/EIPS/eip-155) numeric chain ID. For native currency (ETH), `token` MUST be the zero address (`0x0000000000000000000000000000000000000000`).
+When present, the `pricing` object describes cost and accepted payment protocols. All amounts MUST be in the token's smallest unit (raw `uint256` — e.g., 0.02 USDC = `"20000"`). The `token` field MUST be the ERC-20 contract address on the specified chain, or the zero address for native currency. The `chainId` field MUST be the [EIP-155](https://eips.ethereum.org/EIPS/eip-155) chain ID.
 
 **Per-invocation pricing (fixed cost):**
 
@@ -221,7 +189,7 @@ The `token` field MUST be the ERC-20 contract address of the payment token on th
 }
 ```
 
-When `amount` is present, the cost is fixed per invocation. When `maxAmount` is present instead, the cost is variable up to the specified maximum (compatible with [x402](https://github.com/coinbase/x402) `upto` semantics). Tools MUST specify exactly one of `amount` or `maxAmount`.
+Tools MUST specify exactly one of `amount` (fixed) or `maxAmount` (variable, compatible with [x402](https://github.com/coinbase/x402) `upto` semantics).
 
 **Subscription pricing:**
 
@@ -236,7 +204,7 @@ When `amount` is present, the cost is fixed per invocation. When `maxAmount` is 
 }
 ```
 
-The `billingPeriod` field accepts `"daily"`, `"weekly"`, `"monthly"`, or `"yearly"`. Subscription access is gated onchain via [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) — the subscription NFT’s `expiresAt()` determines whether access is active.
+Subscription access is gated onchain via [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) — the NFT's `expiresAt()` determines whether access is active.
 
 #### Pricing Fields
 
@@ -251,7 +219,7 @@ The `billingPeriod` field accepts `"daily"`, `"weekly"`, `"monthly"`, or `"yearl
 | `chainId` | integer | [EIP-155](https://eips.ethereum.org/EIPS/eip-155) numeric chain ID |
 | `protocols` | array | Accepted payment protocol identifiers (see below) |
 
-The `protocols` array declares which payment protocols the tool’s endpoint accepts. Well-known protocol identifiers include:
+Well-known protocol identifiers:
 
 | Identifier | Protocol | Description |
 | --- | --- | --- |
@@ -259,9 +227,7 @@ The `protocols` array declares which payment protocols the tool’s endpoint acc
 | `mpp` | [MPP](https://mpp.dev/) | Machine Payments Protocol for machine-to-machine payments |
 | `erc20-transfer` | Direct ERC-20 | Direct onchain token transfer before invocation |
 
-The `protocols` array MUST contain at least one entry when `pricing` is present. Gateways SHOULD select a protocol they support from the array. New protocol identifiers MAY be introduced without changes to this standard.
-
-The pricing object is OPTIONAL. Free tools MAY omit it entirely.
+The `protocols` array MUST contain at least one entry when `pricing` is present. Gateways SHOULD select a protocol they support from the array. New protocol identifiers MAY be introduced without changes to this standard. The pricing object is OPTIONAL — free tools omit it entirely.
 
 #### Access Mode Variants
 
@@ -300,7 +266,7 @@ The pricing object is OPTIONAL. Free tools MAY omit it entirely.
 }
 ```
 
-Subscription access uses [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) subscription NFTs. The bound collection MUST implement `IERC5643`. Access is granted only while `expiresAt(tokenId) > block.timestamp`.
+The bound collection MUST implement `IERC5643`. Access is granted only while `expiresAt(tokenId) > block.timestamp`.
 
 #### Example: Paid Open Tool (Per-Invocation)
 
@@ -341,78 +307,6 @@ Subscription access uses [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) sub
 }
 ```
 
-#### Example: Free Open Tool
-
-```json
-{
-  "type": "https://eips.ethereum.org/EIPS/eip-XXXX#registration-v1",
-  "name": "gas-price-checker",
-  "version": "1.0.0",
-  "description": "Returns current gas prices across EVM chains",
-  "endpoint": "https://gas.example.com",
-  "inputs": {
-    "type": "object",
-    "properties": {
-      "chainId": { "type": "integer", "description": "EIP-155 chain ID" }
-    },
-    "required": ["chainId"]
-  },
-  "outputs": {
-    "type": "object",
-    "properties": {
-      "fast": { "type": "string" },
-      "standard": { "type": "string" },
-      "slow": { "type": "string" }
-    }
-  },
-  "access": {
-    "mode": "open"
-  },
-  "timeout_seconds": 10,
-  "tags": ["gas", "utility"]
-}
-```
-
-#### Example: NFT-Gated Tool with Per-Invocation Payment
-
-```json
-{
-  "type": "https://eips.ethereum.org/EIPS/eip-XXXX#registration-v1",
-  "name": "exclusive-alpha-signals",
-  "version": "1.0.0",
-  "description": "Premium trading signals available only to NFT holders, charged per query",
-  "image": "https://example.com/alpha-icon.png",
-  "endpoint": "https://alpha.example.com",
-  "inputs": {
-    "type": "object",
-    "properties": {
-      "pair": { "type": "string", "description": "Trading pair (e.g., ETH/USDC)" }
-    },
-    "required": ["pair"]
-  },
-  "outputs": {
-    "type": "object",
-    "properties": {
-      "signal": { "type": "string" },
-      "strength": { "type": "number" }
-    }
-  },
-  "pricing": {
-    "model": "per-invocation",
-    "amount": "50000",
-    "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    "chainId": 8453,
-    "protocols": ["x402"]
-  },
-  "access": {
-    "mode": "nft",
-    "collection": "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D"
-  },
-  "timeout_seconds": 15,
-  "tags": ["trading", "alpha", "exclusive"]
-}
-```
-
 #### Example: Subscription Tool
 
 ```json
@@ -421,7 +315,6 @@ Subscription access uses [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) sub
   "name": "premium-research-agent",
   "version": "2.1.0",
   "description": "Deep research tool with unlimited queries for subscribers",
-  "image": "https://example.com/research-icon.png",
   "endpoint": "https://research.example.com",
   "inputs": {
     "type": "object",
@@ -458,9 +351,7 @@ Subscription access uses [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) sub
 
 ### 3. Tool Access Registry
 
-The Tool Access Registry handles access control for all three modes. For `OPEN` tools, `hasAccess()` MUST return `true` unconditionally. For `NFT_GATED` tools, it checks `balanceOf` on bound collections. For `SUBSCRIPTION` tools, it checks both token ownership and subscription expiration via [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643)’s `expiresAt()`.
-
-A tool MAY be bound to multiple collections (up to `MAX_COLLECTIONS`). Access is granted if the user holds a token from **any** bound collection (OR logic, not AND). For `SUBSCRIPTION` tools, the held token MUST also have `expiresAt(tokenId) > block.timestamp`.
+The Tool Access Registry handles NFT-based access gating. A tool MAY be bound to multiple collections (up to `MAX_COLLECTIONS`). Access is granted if the user holds a token from **any** bound collection (OR logic). For `SUBSCRIPTION` tools, the held token MUST also have `expiresAt(tokenId) > block.timestamp`.
 
 #### Types
 
@@ -550,88 +441,67 @@ interface IToolAccessRegistry /* is IERC165 */ {
 
 ### Open Access as a First-Class Mode
 
-Most indie tool creators want maximum reach; requiring users to hold a specific NFT reduces the addressable audience. `OPEN` tools have the simplest UX: discover and invoke. The `hasAccess()` function returns `true` unconditionally for these tools, regardless of whether the tool charges per invocation. Making open access a first-class `AccessMode` enum variant (rather than “NFT-gated with no collection bound”) makes the intent explicit and avoids edge cases. An `OPEN` tool can be free (no `pricing` object) or paid (with a `pricing` object declaring cost and protocols).
+Making open access a first-class `AccessMode` enum variant (rather than "NFT-gated with no collection bound") makes intent explicit and avoids edge cases. `OPEN` tools can be free or paid.
 
 ### NFT-Gated Access Supports Existing Collections
 
-The Access Registry’s `addCollection()` function allows binding *any* existing ERC-721 or ERC-1155 collection to a tool. This adds utility to existing NFTs — holders of a PFP collection could get exclusive access to premium tools, creating new value for collections without requiring any changes to the original NFT contract. Recurring access is handled by the separate `SUBSCRIPTION` mode.
+`addCollection()` binds *any* existing ERC-721 or ERC-1155 collection to a tool — no changes to the original NFT contract required. This adds utility to existing NFTs without new deployments.
 
 ### Creator-Hosted Over Platform-Hosted
 
-By requiring creators to host tools on their own infrastructure, the standard avoids specifying a runtime environment, sandbox model, or compute billing system. The gateway only needs the endpoint URL from the Tool Registration File. Creators retain full control over their tech stack, scaling, security, and deployment. This makes the standard maximally gateway-agnostic. Any entity can run a compliant gateway that reads the registry, verifies access, and proxies calls.
+The standard specifies an endpoint URL and manifest schema, not a runtime. Creators retain full control over hosting, scaling, and deployment. Any entity can run a compliant gateway.
 
 ### Separate from ERC-8004
 
-Tools have fundamentally different access patterns than agent identities. Agents need identity, reputation, and validation. Tools need access control (payment + NFT gating), endpoint discovery, and I/O schema definitions. Folding tool registration into ERC-8004 would couple agent identity with tool access control, making both standards more complex. A standalone ERC that references and composes with ERC-8004 keeps both standards focused and allows independent evolution.
+Agents need identity, reputation, and validation. Tools need access control, endpoint discovery, and I/O schemas. A standalone ERC that composes with ERC-8004 keeps both standards focused and allows independent evolution.
 
 ### Declared Payment Protocols Over Prescribed Mechanisms
 
-Rather than prescribing a specific payment mechanism, the standard allows creators to declare which payment protocols their endpoint accepts via the `protocols` array in the pricing object. This enables the ecosystem to evolve. New payment protocols (x402, MPP, direct ERC-20 transfers, or future protocols) can be adopted without changes to the registry standard. Gateways select a compatible protocol from the array, and agents can choose gateways based on protocol support. Gateway signing key management (EIP-712 invocation tokens) and execution receipt registries (Merkle-batched onchain proofs) remain orthogonal to tool discovery and access control. See [Appendix A](about:blank#appendix-a-extension-interfaces) for non-normative extension interfaces that address these concerns.
+Creators declare accepted payment protocols via the `protocols` array. New protocols can be adopted without changes to the registry standard. Gateway key management and execution receipts are orthogonal — see [Appendix A](#appendix-a-extension-interfaces).
 
 ### Subscription as a First-Class Access Mode
 
-Subscription access is a distinct `AccessMode` rather than a sub-type of `NFT_GATED` because the access check semantics differ: NFT-gated tools only check token ownership (`balanceOf > 0`), while subscription tools must additionally verify that the subscription has not expired (`expiresAt > block.timestamp`). Making this a separate enum variant ensures implementations cannot accidentally skip the expiration check. [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) was chosen because it extends ERC-721 with minimal additions (`renewSubscription`, `cancelSubscription`, `expiresAt`).
+`SUBSCRIPTION` is a distinct `AccessMode` because the access check differs: it must additionally verify `expiresAt > block.timestamp`. A separate enum variant ensures implementations cannot accidentally skip the expiration check. ERC-5643 was chosen because it extends ERC-721 with minimal additions (`renewSubscription`, `cancelSubscription`, `expiresAt`).
 
 ## Backwards Compatibility
 
-This ERC introduces new interfaces and does not modify any existing standards. It is fully compatible with:
-
-- **ERC-721 / ERC-1155**: Used for NFT-gated access control. The Access Registry reads `balanceOf` from existing collections without requiring any modifications.
-- **ERC-8004**: An agent registered via ERC-8004 can discover and invoke tools registered via this ERC. The Tool Registration File’s `services` array is compatible with ERC-8004’s service declaration format.
-- **ERC-5643**: Subscription-based access passes use ERC-5643’s `expiresAt()` interface for time-limited access.
-- **ERC-165**: All interfaces declare ERC-165 interface IDs for runtime introspection.
-
-No backwards compatibility issues exist.
+This ERC introduces new interfaces and does not modify existing standards. It composes with ERC-721, ERC-1155, ERC-5643, ERC-8004, and ERC-165 without requiring changes to any of them.
 
 ## Reference Implementation
 
-A complete reference implementation with Foundry tests (125 tests, all passing) is available at: [github.com/ProjectOpenSea/tool-registry](https://github.com/ProjectOpenSea/tool-registry)
-
-The reference implementation includes the core interfaces defined in this standard plus the extension interfaces described in Appendix A:
-- `ToolRegistry.sol` — Core registry with AccessMode, tool CRUD, `hasAccess()`
-- `ToolAccessRegistry.sol` — NFT-gated access with collection bindings
-- `GatewayKeyRegistry.sol` — Gateway signing key management (Extension)
-- `ExecutionReceiptRegistry.sol` — Batch Merkle root posting and verification (Extension)
-- `ToolPayment.sol` — Payment config, balances, and withdrawal (Extension)
+A complete Foundry reference implementation (core + Appendix A extensions) is available at: [github.com/ProjectOpenSea/tool-registry](https://github.com/ProjectOpenSea/tool-registry)
 
 ## Security Considerations
 
 ### SSRF via Creator-Hosted Endpoints
 
-A malicious tool creator could register an endpoint pointing to internal or cloud metadata services. **Mitigation**: Gateways MUST validate and sanitize endpoint URLs. Gateways SHOULD enforce HTTPS-only, reject private/reserved IP ranges, follow redirects cautiously, and implement request timeouts. The Tool Registration File schema requires HTTPS endpoints.
+A malicious creator could register an endpoint pointing to internal services. Gateways MUST validate endpoint URLs, enforce HTTPS-only, and reject private/reserved IP ranges.
 
 ### NFT Flash Loan Attacks
 
-An attacker could flash-loan an NFT to pass `hasAccess()`, invoke the tool, and return the NFT in the same transaction. **Mitigation**: Gateways SHOULD perform access checks in a context where flash loans cannot be exploited (e.g., at the start of a new transaction, not within a callback). Implementations MAY cache access check results at the block level. For high-value tools, creators MAY require a minimum hold duration.
+An attacker could flash-loan an NFT to pass `hasAccess()` and return it in the same transaction. Gateways SHOULD perform access checks outside callback contexts. Implementations MAY cache results at the block level.
 
 ### Malicious Tool Endpoints
 
-A tool endpoint could return malicious data, take excessively long, or attempt to exfiltrate input data. **Mitigation**: Gateways MUST enforce the `timeout_seconds` from the Tool Registration File. Gateways SHOULD validate response structure against the declared `outputs` JSON Schema. Gateways SHOULD NOT forward raw error messages from tool endpoints to users.
+Gateways MUST enforce `timeout_seconds`. Gateways SHOULD validate responses against the declared `outputs` schema and SHOULD NOT forward raw error messages to users.
 
 ### Front-Running Tool Registration
 
-An attacker could monitor the mempool and front-run a tool registration to claim a desirable tool ID. **Mitigation**: Tool IDs are auto-incrementing counters, not user-chosen, so there is no “name squatting” attack. However, implementations MAY add a commit-reveal scheme if tool IDs gain economic significance. Tool metadata (name, description) is stored off-chain in the Tool Registration File, not onchain.
+Tool IDs are auto-incrementing counters, not user-chosen, so there is no name-squatting vector. Metadata is stored offchain in the Tool Registration File.
 
 ### Metadata URI Mutability
 
-Tool creators can update their `metadataURI` at any time, potentially changing pricing, access mode descriptions, or endpoint URLs without onchain notice. **Mitigation**: All metadata updates emit `ToolMetadataUpdated` events for indexing and auditability. The `AccessMode` is stored onchain and cannot be changed via metadata updates alone. Gateways SHOULD cache and diff metadata to detect significant changes.
+Creators can update `metadataURI` at any time. The `AccessMode` is stored onchain and cannot be changed via metadata alone. All updates emit `ToolMetadataUpdated` for auditability. Gateways SHOULD cache and diff metadata.
 
-For stronger immutability guarantees, the `metadataURI` field supports several URI schemes beyond centralized HTTPS hosting:
-
-- **IPFS** (`ipfs://<CID>`): Content-addressed and immutable. Recommended for tools whose metadata should never change after registration.
-- **Arweave** (`ar://<hash>`): Permanent storage with economic guarantees of persistence.
-- **Onchain / inline** (`data:application/json;base64,<encoded>`): The Tool Registration File can be embedded directly onchain as a Base64-encoded `data:` URI, analogous to [onchain NFT metadata](https://docs.opensea.io/docs/metadata-standards#onchain-metadata). This eliminates all external dependencies — the metadata is fully self-contained in the contract’s state and readable without any off-chain requests. This approach is best suited for tools with small, stable manifests.
-- **`web3://`** ([ERC-4804](https://eips.ethereum.org/EIPS/eip-4804)): The `metadataURI` MAY use the `web3://` protocol to resolve metadata from another smart contract, enabling fully onchain and composable metadata that can be read by any `web3://`aware client without centralized infrastructure.
-
-Creators SHOULD choose the URI scheme that matches their mutability and availability requirements. Gateways MUST support resolving `https://`, `ipfs://`, `ar://`, `data:`, and `web3://` URIs.
+For stronger immutability, the `metadataURI` supports: **IPFS** (`ipfs://<CID>`), **Arweave** (`ar://<hash>`), **inline** (`data:application/json;base64,...`), and **`web3://`** ([ERC-4804](https://eips.ethereum.org/EIPS/eip-4804)). Gateways MUST support resolving `https://`, `ipfs://`, `ar://`, `data:`, and `web3://` URIs.
 
 ### Subscription Expiration Race Conditions
 
-A subscription may expire between the time `hasAccess()` returns `true` and the time a tool invocation completes. **Mitigation**: Gateways SHOULD check `expiresAt()` at the start of each invocation and reject requests where the subscription expires within the tool’s `timeout_seconds` window. Implementations SHOULD treat `expiresAt(tokenId) < block.timestamp + timeout_seconds` as insufficient access. Creators MAY add a grace period to avoid penalizing users whose subscriptions expire mid-invocation.
+A subscription may expire mid-invocation. Implementations SHOULD treat `expiresAt(tokenId) < block.timestamp + timeout_seconds` as insufficient access. Creators MAY provide a grace period to avoid penalizing users whose subscriptions expire during tool execution.
 
 ## Appendix A: Extension Interfaces
 
-The following interfaces are non-normative. They describe common patterns that gateway implementations MAY adopt to complement the core registry standard. These are provided as RECOMMENDED starting points, not requirements.
+The following interfaces are non-normative extensions that gateway implementations MAY adopt.
 
 ### A.1 Gateway Signing Key Registry
 
@@ -746,7 +616,7 @@ interface IExecutionReceiptRegistry /* is IERC165 */ {
 
 ### A.3 Payment Interface
 
-Gateways MAY use a standardized payment interface for per-invocation payments. This is compatible with [x402](https://github.com/coinbase/x402) `upto` semantics: the tool declares a `maxPrice` ceiling, the creator reports a usage-based `chargeAmount` per invocation (`chargeAmount <= maxPrice`), and on failure/timeout the charge is zero with no onchain transaction needed. The `settlePayment` function is restricted to the tool creator (trusted gateway operator) to prevent griefing via front-run zero-cost settlements. Invocation deduplication is scoped per tool so the same `invocationId` can legitimately appear across different tools. The interface does not require any specific payment protocol.
+Gateways MAY use a standardized payment interface for per-invocation payments. Compatible with [x402](https://github.com/coinbase/x402) `upto` semantics: the tool declares a `maxPrice` ceiling, the creator reports a usage-based `chargeAmount` per invocation (`chargeAmount <= maxPrice`), and on failure the charge is zero. `settlePayment` is restricted to the tool creator to prevent griefing. Invocation deduplication is scoped per tool.
 
 ```solidity
 /// @notice Payment configuration for a tool.
@@ -845,7 +715,7 @@ interface IToolPayment /* is IERC165 */ {
 
 ## Appendix B: Cross-Chain NFT Access Gating (Non-Normative)
 
-The core `IToolAccessRegistry` checks `balanceOf`/`ownerOf` directly onchain, which requires the NFT collection to live on the same chain as the registry. This extension enables tool creators to gate access on NFT collections deployed on other chains (e.g., gate on a mainnet collection while the registry lives on Base).
+The core `IToolAccessRegistry` requires the NFT collection to live on the same chain as the registry. This extension enables gating on collections deployed on other chains.
 
 ### B.1 Cross-Chain Binding
 
@@ -937,13 +807,7 @@ function removeCrossChainCollection(uint256 toolId, uint256 index) external;
 
 ### B.5 Staleness Window
 
-The `checkedAt` timestamp in the proof determines how fresh the offchain balance check is. Implementations SHOULD enforce a configurable staleness window per tool:
-
-- **Default**: 5 minutes (300 seconds).
-- **Shorter windows** (e.g., 60 seconds) increase security but require more frequent attestations and worse UX.
-- **Longer windows** (e.g., 15 minutes) improve UX but increase the risk of stale proofs (e.g., user transferred the NFT after the check).
-
-Tool creators SHOULD be able to configure the staleness window for their tool. Gateways SHOULD refresh attestations proactively before the window expires.
+Implementations SHOULD enforce a configurable staleness window per tool (default: 300 seconds). Gateways SHOULD refresh attestations proactively before the window expires.
 
 ### B.6 EIP-712 Domain Separator
 
@@ -951,26 +815,16 @@ The EIP-712 domain separator for cross-chain proofs MUST include:
 
 - `name`: `"ToolRegistryCrossChain"`
 - `version`: `"1"`
-- `chainId`: The chain ID where the Tool Registry (not the NFT collection) is deployed
+- `chainId`: The chain ID where the Tool Registry is deployed
 - `verifyingContract`: The Tool Access Registry contract address
-
-Including the registry's chain ID and address prevents cross-deployment replay attacks where a proof valid on one chain's registry is reused on another.
 
 ### B.7 Trust Model
 
-The gateway mediates tool invocations (routing requests, enforcing access, validating payments). The user already trusts the gateway to:
-
-1. Correctly check same-chain `balanceOf` before proxying
-2. Forward requests honestly to the tool endpoint
-3. Validate payments accurately
-
-Adding remote-chain balance verification to this list does not expand the trust boundary. The attestation is cryptographically bound to a specific user, tool, chain, collection, and timestamp. A compromised gateway key can forge attestations, but this risk already exists for same-chain access, where a compromised gateway could bypass `hasAccess()` entirely.
+The user already trusts the gateway to check same-chain `balanceOf`, forward requests, and validate payments. Adding remote-chain balance verification does not expand the trust boundary. The attestation is cryptographically bound to a specific user, tool, chain, collection, and timestamp.
 
 ### B.8 Future Upgrade Path
 
-The `hasAccessWithRemoteProof` interface is designed to be forward-compatible with trustless verification. The gateway attestation model can be replaced with trustless storage proofs (e.g., [Herodotus](https://www.herodotus.dev/), [Lagrange](https://www.lagrange.dev/), [Axiom](https://www.axiom.xyz/)) in a future version without changing the external interface — only the verification logic inside `hasAccessWithRemoteProof` would change from "recover EIP-712 signer and check gateway key registry" to "verify storage proof against the remote chain's state root."
-
-This migration path allows deployments to start with gateway attestations (simpler, available today) and upgrade to trustless proofs as the infrastructure matures, without breaking existing tool registrations or collection bindings.
+The gateway attestation model can be replaced with trustless storage proofs (e.g., [Herodotus](https://www.herodotus.dev/), [Lagrange](https://www.lagrange.dev/), [Axiom](https://www.axiom.xyz/)) without changing the external `hasAccessWithRemoteProof` interface — only the internal verification logic changes.
 
 ## Copyright
 
