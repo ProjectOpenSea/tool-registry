@@ -958,11 +958,11 @@ Including the registry's chain ID and address prevents cross-deployment replay a
 
 ### B.7 Trust Model
 
-The gateway already mediates tool invocations (routing requests, enforcing access, settling payments). The user already trusts the gateway to:
+The gateway mediates tool invocations (routing requests, enforcing access, validating payments). The user already trusts the gateway to:
 
 1. Correctly check same-chain `balanceOf` before proxying
 2. Forward requests honestly to the tool endpoint
-3. Settle payments accurately
+3. Validate payments accurately
 
 Adding remote-chain balance verification to this list does not expand the trust boundary. The attestation is cryptographically bound to a specific user, tool, chain, collection, and timestamp. A compromised gateway key can forge attestations, but this risk already exists for same-chain access, where a compromised gateway could bypass `hasAccess()` entirely.
 
