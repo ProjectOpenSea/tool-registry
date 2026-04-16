@@ -177,6 +177,11 @@ contract ExecutionReceiptRegistryTest is Test {
         assertTrue(receiptRegistry.supportsInterface(type(IExecutionReceiptRegistry).interfaceId));
     }
 
+    /// @dev Locks the hardcoded interface ID declared in the ERC spec.
+    function test_interfaceId_IExecutionReceiptRegistry_matchesSpec() public pure {
+        assertEq(type(IExecutionReceiptRegistry).interfaceId, bytes4(0x9e391f7c));
+    }
+
     function test_supportsInterface_ERC165() public view {
         assertTrue(receiptRegistry.supportsInterface(type(IERC165).interfaceId));
     }

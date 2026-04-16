@@ -82,7 +82,7 @@ contract ToolRegistryTest is Test {
         uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
 
         vm.expectEmit(true, false, false, true);
-        emit IToolRegistry.ToolMetadataUpdated(toolId, META_URI_2);
+        emit IToolRegistry.ToolMetadataUpdated(toolId, META_URI, META_URI_2);
         registry.updateToolMetadata(toolId, META_URI_2);
         vm.stopPrank();
 
@@ -227,8 +227,38 @@ contract ToolRegistryTest is Test {
         vm.stopPrank();
     }
 
+    /// @dev Locks the normative behavior that toolCount() includes deactivated
+    ///      tools and tool IDs are never reused.
+    function test_toolCount_includesDeactivatedTools() public {
+        vm.startPrank(creator);
+        uint256 id1 = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 id2 = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 id3 = registry.registerTool(META_URI, AccessMode.OPEN);
+        assertEq(registry.toolCount(), 3);
+
+        registry.deactivateTool(id2);
+        assertEq(registry.toolCount(), 3);
+
+        registry.deactivateTool(id1);
+        registry.deactivateTool(id3);
+        assertEq(registry.toolCount(), 3);
+
+        // New registration gets the next sequential ID (4), never reusing 1/2/3
+        uint256 id4 = registry.registerTool(META_URI, AccessMode.OPEN);
+        assertEq(id4, 4);
+        assertEq(registry.toolCount(), 4);
+        vm.stopPrank();
+    }
+
     function test_supportsInterface_IToolRegistry() public view {
         assertTrue(registry.supportsInterface(type(IToolRegistry).interfaceId));
+    }
+
+    /// @dev Locks the hardcoded interface ID declared in the ERC spec. If this
+    ///      fails, the spec's `IToolRegistry` ID must be updated to match the
+    ///      value printed in the failure message.
+    function test_interfaceId_IToolRegistry_matchesSpec() public pure {
+        assertEq(type(IToolRegistry).interfaceId, bytes4(0x41a32136));
     }
 
     function test_supportsInterface_ERC165() public view {

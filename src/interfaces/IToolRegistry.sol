@@ -21,7 +21,10 @@ struct ToolConfig {
 /// @dev ERC-165 interface ID computed from type(IToolRegistry).interfaceId
 interface IToolRegistry {
     event ToolRegistered(uint256 indexed toolId, address indexed creator, AccessMode accessMode);
-    event ToolMetadataUpdated(uint256 indexed toolId, string newURI);
+    /// @notice Emitted when a tool's metadata URI is updated.
+    /// @dev Emits both the prior and new URI so indexers and gateways can diff
+    ///      manifests offchain without re-fetching the previous URI.
+    event ToolMetadataUpdated(uint256 indexed toolId, string oldURI, string newURI);
     event ToolDeactivated(uint256 indexed toolId);
     event ToolReactivated(uint256 indexed toolId);
 

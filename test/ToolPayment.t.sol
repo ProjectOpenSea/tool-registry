@@ -471,6 +471,11 @@ contract ToolPaymentTest is Test {
         assertTrue(payment.supportsInterface(type(IToolPayment).interfaceId));
     }
 
+    /// @dev Locks the hardcoded interface ID declared in the ERC spec.
+    function test_interfaceId_IToolPayment_matchesSpec() public pure {
+        assertEq(type(IToolPayment).interfaceId, bytes4(0xe1fc6949));
+    }
+
     function test_supportsInterface_ERC165() public view {
         assertTrue(payment.supportsInterface(type(IERC165).interfaceId));
     }

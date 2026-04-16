@@ -23,26 +23,26 @@ contract ToolAccessRegistry is IToolAccessRegistry, ERC165 {
         toolRegistry = IToolRegistry(_toolRegistry);
     }
 
-    function MAX_COLLECTIONS() external pure returns (uint256) {
+    function MAX_COLLECTIONS() external view returns (uint256) {
         return MAX_COLLECTIONS_VALUE;
     }
 
-    function hasAccess(address user, uint256 toolId) external view returns (bool) {
-        return _checkAccess(user, toolId, 0, false);
+    function hasAccess(uint256 toolId, address account) external view returns (bool) {
+        return _checkAccess(account, toolId, 0, false);
     }
 
     /// @notice Check access using a caller-supplied tokenId for SUBSCRIPTION expiry.
     /// @dev This is the primary interface for SUBSCRIPTION mode. The no-proof
     ///      hasAccess() falls back to binding.tokenId which only works when
-    ///      the user holds that exact tokenId.
-    function hasAccessWithProof(address user, uint256 toolId, uint256 tokenId) external view returns (bool) {
-        return _checkAccess(user, toolId, tokenId, true);
+    ///      the account holds that exact tokenId.
+    function hasAccessWithProof(uint256 toolId, address account, uint256 tokenId) external view returns (bool) {
+        return _checkAccess(account, toolId, tokenId, true);
     }
 
     /// @dev Iterates up to MAX_COLLECTIONS*2 bindings, each doing an external
     ///      call (balanceOf/ownerOf/expiresAt). Consumers should set an appropriate
     ///      gas limit when calling hasAccess from other contracts.
-    function _checkAccess(address user, uint256 toolId, uint256 proofTokenId, bool useProof)
+    function _checkAccess(address account, uint256 toolId, uint256 proofTokenId, bool useProof)
         internal
         view
         returns (bool)
@@ -66,12 +66,12 @@ contract ToolAccessRegistry is IToolAccessRegistry, ERC165 {
 
             if (binding.tokenStandard == TokenStandard.ERC721) {
                 if (config.accessMode == AccessMode.NFT_GATED) {
-                    if (IERC721(binding.collection).balanceOf(user) > 0) return true;
+                    if (IERC721(binding.collection).balanceOf(account) > 0) return true;
                 } else {
                     // SUBSCRIPTION: verify ownership of the specific proof token
                     uint256 subTokenId = useProof ? proofTokenId : binding.tokenId;
                     try IERC721(binding.collection).ownerOf(subTokenId) returns (address owner) {
-                        if (owner == user) {
+                        if (owner == account) {
                             try IERC5643(binding.collection).expiresAt(subTokenId) returns (uint64 expiry) {
                                 if (expiry > block.timestamp) return true;
                             } catch {}
@@ -79,16 +79,9 @@ contract ToolAccessRegistry is IToolAccessRegistry, ERC165 {
                     } catch {}
                 }
             } else {
-                if (config.accessMode == AccessMode.NFT_GATED) {
-                    if (IERC1155(binding.collection).balanceOf(user, binding.tokenId) > 0) return true;
-                } else {
-                    uint256 subTokenId = useProof ? proofTokenId : binding.tokenId;
-                    if (IERC1155(binding.collection).balanceOf(user, subTokenId) > 0) {
-                        try IERC5643(binding.collection).expiresAt(subTokenId) returns (uint64 expiry) {
-                            if (expiry > block.timestamp) return true;
-                        } catch {}
-                    }
-                }
+                // ERC-1155 bindings are only permitted for NFT_GATED tools; see
+                // addCollection's UnsupportedStandardForSubscription guard.
+                if (IERC1155(binding.collection).balanceOf(account, binding.tokenId) > 0) return true;
             }
 
             unchecked {
@@ -100,8 +93,14 @@ contract ToolAccessRegistry is IToolAccessRegistry, ERC165 {
     }
 
     function addCollection(uint256 toolId, address collection, TokenStandard standard, uint256 tokenId) external {
-        _requireToolCreator(toolId);
+        // Inline creator check (rather than _requireToolCreator) so the config
+        // fetched here is reused for the access-mode validation below.
+        ToolConfig memory config = toolRegistry.getToolConfig(toolId);
+        if (config.creator != msg.sender) revert NotToolCreator(toolId, msg.sender);
         if (collection == address(0)) revert InvalidCollection(collection);
+        if (standard == TokenStandard.ERC1155 && config.accessMode == AccessMode.SUBSCRIPTION) {
+            revert UnsupportedStandardForSubscription(toolId, standard);
+        }
         if (_activeCount[toolId] >= MAX_COLLECTIONS_VALUE) revert MaxCollectionsReached(toolId);
         if (_bindings[toolId].length >= MAX_COLLECTIONS_VALUE * 2) revert MaxCollectionsReached(toolId);
 

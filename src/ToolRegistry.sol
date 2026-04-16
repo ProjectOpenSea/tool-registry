@@ -49,8 +49,9 @@ contract ToolRegistry is IToolRegistry, ERC165 {
         _requireCreator(toolId);
         if (bytes(newURI).length == 0) revert InvalidMetadataURI();
 
+        string memory oldURI = _tools[toolId].metadataURI;
         _tools[toolId].metadataURI = newURI;
-        emit ToolMetadataUpdated(toolId, newURI);
+        emit ToolMetadataUpdated(toolId, oldURI, newURI);
     }
 
     function deactivateTool(uint256 toolId) external {
@@ -83,7 +84,7 @@ contract ToolRegistry is IToolRegistry, ERC165 {
     function hasAccess(uint256 toolId, address account) external view returns (bool) {
         _requireExists(toolId);
         if (address(accessRegistry) == address(0)) revert NotInitialized();
-        return accessRegistry.hasAccess(account, toolId);
+        return accessRegistry.hasAccess(toolId, account);
     }
 
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {

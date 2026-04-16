@@ -110,6 +110,11 @@ contract GatewayKeyRegistryTest is Test {
         assertTrue(keyRegistry.supportsInterface(type(IGatewayKeyRegistry).interfaceId));
     }
 
+    /// @dev Locks the hardcoded interface ID declared in the ERC spec.
+    function test_interfaceId_IGatewayKeyRegistry_matchesSpec() public pure {
+        assertEq(type(IGatewayKeyRegistry).interfaceId, bytes4(0xf5c37176));
+    }
+
     function test_supportsInterface_ERC165() public view {
         assertTrue(keyRegistry.supportsInterface(type(IERC165).interfaceId));
     }

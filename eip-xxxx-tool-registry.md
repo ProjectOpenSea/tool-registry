@@ -13,11 +13,11 @@ requires: 165, 721, 1155, 5643
 
 ## Abstract
 
-This ERC defines an onchain registry for AI agent tools — the tool-layer counterpart to [ERC-8004 (Trustless Agents)](https://eips.ethereum.org/EIPS/eip-8004). Each registered tool has a unique onchain ID, an access mode (**open**, **NFT-gated** via ERC-721/ERC-1155, or **subscription** via [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643)), and a metadata URI pointing to a standardized JSON manifest describing the tool's endpoint, I/O schemas, pricing, and access configuration. Any access mode can be free or paid; pricing is independent of access control.
+This ERC defines an onchain registry for AI agent tools: the tool-layer counterpart to [ERC-8004 (Trustless Agents)](https://eips.ethereum.org/EIPS/eip-8004). Each registered tool has a unique onchain ID, an access mode (**open**, **NFT-gated** via ERC-721/ERC-1155, or **subscription** via [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643)), and a metadata URI pointing to a standardized JSON manifest describing the tool's endpoint, I/O schemas, pricing, and access configuration. Any access mode can be free or paid; pricing is independent of access control.
 
 ## Motivation
 
-ERC-8004 standardizes agent identity, reputation, and validation — but there is no equivalent standard for the *tools* agents invoke. Tool discovery is fragmented across proprietary APIs and documentation sites. This ERC fills that gap with an onchain registry that provides: universal tool discovery via metadata URIs and standardized manifests; flexible access control (open, NFT-gated, or subscription); creator-hosted endpoints with no prescribed runtime; and interoperability across agent frameworks (MCP, A2A, etc.) and payment protocols (x402, etc.).
+ERC-8004 standardizes agent identity, reputation, and validation, but there is no equivalent standard for the *tools* agents invoke. Tool discovery is fragmented across proprietary APIs and documentation sites. This ERC fills that gap with an onchain registry that provides: universal tool discovery via metadata URIs and standardized manifests; flexible access control (open, NFT-gated, or subscription); creator-hosted endpoints with no prescribed runtime; and interoperability across agent frameworks (MCP, A2A, etc.) and payment protocols (x402, etc.).
 
 ## Specification
 
@@ -30,8 +30,8 @@ The key words “MUST”, “MUST NOT”, “REQUIRED”, “SHALL”, “SHALL 
 ```solidity
 /// @notice Access control mode for a registered tool.
 enum AccessMode {
-    /// Open access — anyone can invoke. Tool may be free or paid
-    /// (pricing is declared in the Tool Registration File, not onchain).
+    /// Open access: anyone can invoke. Tool may be free or paid
+    /// (pricing is declared in the Tool Manifest, not onchain).
     OPEN,
     /// Caller must hold a token from a bound NFT collection.
     NFT_GATED,
@@ -42,7 +42,7 @@ enum AccessMode {
 /// @notice Onchain configuration for a registered tool.
 struct ToolConfig {
     address creator;          // Address that registered the tool
-    string metadataURI;       // Resolves to Tool Registration File (JSON)
+    string metadataURI;       // Resolves to Tool Manifest (JSON)
     AccessMode accessMode;    // OPEN, NFT_GATED, or SUBSCRIPTION
     bool active;              // Whether the tool is currently active
 }
@@ -65,7 +65,11 @@ interface IToolRegistry /* is IERC165 */ {
     event ToolRegistered(uint256 indexed toolId, address indexed creator, AccessMode accessMode);
 
     /// @notice Emitted when a tool's metadata URI is updated.
-    event ToolMetadataUpdated(uint256 indexed toolId, string newURI);
+    /// @dev Emits both the prior and new URI so indexers and gateways can diff
+    ///      manifests offchain without re-fetching the previous URI. Critical
+    ///      manifest fields that can change silently (notably `pricing.token`,
+    ///      `pricing.chainId`, and `endpoint`) are diffable only via this event.
+    event ToolMetadataUpdated(uint256 indexed toolId, string oldURI, string newURI);
 
     /// @notice Emitted when a tool is deactivated.
     event ToolDeactivated(uint256 indexed toolId);
@@ -94,7 +98,7 @@ interface IToolRegistry /* is IERC165 */ {
 
     /// @notice Register a new tool.
     /// @dev The tool's `creator` is set to `msg.sender` and cannot be changed.
-    /// @param metadataURI URI that resolves to the Tool Registration File.
+    /// @param metadataURI URI that resolves to the Tool Manifest.
     /// @param accessMode  Access control mode (OPEN, NFT_GATED, or SUBSCRIPTION).
     /// @return toolId     The unique identifier assigned to the tool.
     function registerTool(string calldata metadataURI, AccessMode accessMode)
@@ -128,14 +132,22 @@ interface IToolRegistry /* is IERC165 */ {
     ///      (which verifies ERC-5643 expiration).
     function hasAccess(uint256 toolId, address account) external view returns (bool);
 
-    /// @notice Get the total number of registered tools.
+    /// @notice Get the total number of registered tools, including deactivated ones.
+    /// @dev Tool IDs are assigned sequentially starting from 1. Implementations
+    ///      MUST NOT decrement or reuse tool IDs when tools are deactivated, so
+    ///      `toolCount()` equals the highest assigned tool ID. Callers SHOULD use
+    ///      `getToolConfig(toolId).active` to filter active tools during pagination.
     function toolCount() external view returns (uint256);
 }
 ```
 
-### 2. Tool Registration File
+#### Tool ID Scope
 
-The `metadataURI` in `ToolConfig` MUST resolve to a JSON document conforming to the schema below.
+Tool IDs are scoped to the `(chainId, registryAddress)` tuple. Two independent deployments of this registry (on the same or different chains) MAY assign tool ID `42` to unrelated tools. Offchain consumers (indexers, wallets, agent frameworks) MUST qualify tool references with the deploying chain ID and registry address. The RECOMMENDED canonical identifier format follows CAIP-19: `eip155:<chainId>/erc-xxxx:<registryAddress>/<toolId>`.
+
+### 2. Tool Manifest
+
+The `metadataURI` in `ToolConfig` MUST resolve to a JSON document conforming to the schema below. Gateways MUST validate that the `type` field matches a known schema version identifier and MUST reject manifests with an unknown or missing `type`. This prevents silent schema drift and ensures that future schema revisions can be introduced without breaking existing tools.
 
 #### Required Fields
 
@@ -156,14 +168,15 @@ The `metadataURI` in `ToolConfig` MUST resolve to a JSON document conforming to 
 | --- | --- | --- |
 | `image` | string | Tool icon URL |
 | `pricing` | object | Payment configuration (see below) |
-| `timeout_seconds` | integer | Maximum execution time (1-300, default 30) |
-| `tags` | array | Discovery tags (max 10, lowercase alphanumeric + hyphens) |
+| `timeoutSeconds` | integer | Maximum execution time (1-300, default 30) |
+| `gracePeriodSeconds` | integer | Subscription grace period (0-86400, default 0); see [Subscription Expiration Race Conditions](#subscription-expiration-race-conditions) |
+| `tags` | array | Discovery tags (lowercase alphanumeric + hyphens) |
 | `services` | array | Compatible with ERC-8004 services array |
 | `registrations` | array | Onchain registration references |
 
 #### Pricing Object
 
-When present, the `pricing` object describes cost and accepted payment protocols. All amounts MUST be in the token's smallest unit (raw `uint256` — e.g., 0.02 USDC = `"20000"`). The `token` field MUST be the ERC-20 contract address on the specified chain, or the zero address for native currency. The `chainId` field MUST be the [EIP-155](https://eips.ethereum.org/EIPS/eip-155) chain ID.
+When present, the `pricing` object describes cost and accepted payment protocols. All amounts MUST be in the token's smallest unit (raw `uint256`; e.g., 0.02 USDC = `"20000"`). The `token` field MUST be the ERC-20 contract address on the specified chain, or the zero address for native currency. The `chainId` field MUST be the [EIP-155](https://eips.ethereum.org/EIPS/eip-155) chain ID.
 
 **Per-invocation pricing (fixed cost):**
 
@@ -204,7 +217,7 @@ Tools MUST specify exactly one of `amount` (fixed) or `maxAmount` (variable, com
 }
 ```
 
-Subscription access is gated onchain via [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643) — the NFT's `expiresAt()` determines whether access is active.
+Subscription access is gated onchain via [ERC-5643](https://eips.ethereum.org/EIPS/eip-5643). The NFT's `expiresAt()` determines whether access is active.
 
 #### Pricing Fields
 
@@ -219,19 +232,13 @@ Subscription access is gated onchain via [ERC-5643](https://eips.ethereum.org/EI
 | `chainId` | integer | [EIP-155](https://eips.ethereum.org/EIPS/eip-155) numeric chain ID |
 | `protocols` | array | Accepted payment protocol identifiers (see below) |
 
-Well-known protocol identifiers:
+Protocol identifiers are opaque strings. The `protocols` array MUST contain at least one entry when `pricing` is present. Gateways SHOULD select a protocol they support from the array. New protocol identifiers MAY be introduced without changes to this standard. The pricing object is OPTIONAL; free tools omit it entirely.
 
-| Identifier | Protocol | Description |
-| --- | --- | --- |
-| `x402` | [x402](https://github.com/coinbase/x402) | HTTP 402-based micropayments with `upto` support |
-| `mpp` | [MPP](https://mpp.dev/) | Machine Payments Protocol for machine-to-machine payments |
-| `erc20-transfer` | Direct ERC-20 | Direct onchain token transfer before invocation |
-
-The `protocols` array MUST contain at least one entry when `pricing` is present. Gateways SHOULD select a protocol they support from the array. New protocol identifiers MAY be introduced without changes to this standard. The pricing object is OPTIONAL — free tools omit it entirely.
+A non-normative registry of well-known protocol identifiers is maintained at [`docs/protocol-identifiers.md`](https://github.com/ProjectOpenSea/tool-registry/blob/main/docs/protocol-identifiers.md) in the reference implementation repository. At time of writing, the registry includes `x402` ([x402](https://github.com/coinbase/x402), HTTP 402 micropayments with `upto` support), `mpp` ([MPP](https://mpp.dev/), machine-to-machine payments), and `erc20-transfer` (direct ERC-20 transfer before invocation). Identifiers in the registry are informative; interoperability requires only that gateway and manifest agree on a shared string.
 
 #### Access Mode Variants
 
-**Open** (anyone can invoke — free or paid):
+**Open** (anyone can invoke, free or paid):
 
 ```json
 { "mode": "open" }
@@ -302,7 +309,7 @@ The bound collection MUST implement `IERC5643`. Access is granted only while `ex
   "access": {
     "mode": "open"
   },
-  "timeout_seconds": 30,
+  "timeoutSeconds": 30,
   "tags": ["prediction-markets", "alpha", "trading"]
 }
 ```
@@ -344,7 +351,7 @@ The bound collection MUST implement `IERC5643`. Access is granted only while `ex
     "collection": "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
     "billingPeriod": "monthly"
   },
-  "timeout_seconds": 120,
+  "timeoutSeconds": 120,
   "tags": ["research", "deep-search", "premium"]
 }
 ```
@@ -352,6 +359,8 @@ The bound collection MUST implement `IERC5643`. Access is granted only while `ex
 ### 3. Tool Access Registry
 
 The Tool Access Registry handles NFT-based access gating. A tool MAY be bound to multiple collections (up to `MAX_COLLECTIONS`). Access is granted if the user holds a token from **any** bound collection (OR logic). For `SUBSCRIPTION` tools, the held token MUST also have `expiresAt(tokenId) > block.timestamp`.
+
+`SUBSCRIPTION` tools MUST bind only ERC-721 collections (which ERC-5643 extends). Binding an ERC-1155 collection to a `SUBSCRIPTION` tool is out of scope for this version of the standard: ERC-5643 defines `expiresAt(uint256 tokenId)` for ERC-721 tokens, and a per-`(owner, tokenId)` expiration semantic for semi-fungible tokens is not yet standardized. Implementations MUST revert in `addCollection` when a caller attempts to bind an `ERC1155` collection to a tool whose `accessMode` is `SUBSCRIPTION`.
 
 #### Types
 
@@ -376,11 +385,18 @@ pragma solidity ^0.8.24;
 
 /// @title IToolAccessRegistry
 /// @notice NFT-based access gating for tools with payment-only passthrough.
-/// @dev ERC-165 interface ID: 0x56860c64
+/// @dev ERC-165 interface ID: 0x542e220b
 interface IToolAccessRegistry /* is IERC165 */ {
 
     /// @notice Maximum number of collection bindings per tool.
-    function MAX_COLLECTIONS() external pure returns (uint256); // 20
+    /// @dev Implementations MUST enforce the value returned by `MAX_COLLECTIONS()`
+    ///      as a hard cap on the number of bindings per tool (returning
+    ///      `MaxCollectionsReached` from `addCollection` once the cap is reached).
+    ///      The returned value MUST be >= 1 and SHOULD NOT exceed 100 to bound the
+    ///      gas cost of `hasAccess` (which iterates bindings) and `getCollections`.
+    ///      Conforming implementations SHOULD return 20 unless a deployment has
+    ///      a documented reason to deviate.
+    function MAX_COLLECTIONS() external view returns (uint256);
 
     // ──────────────────── Events ────────────────────
 
@@ -393,35 +409,40 @@ interface IToolAccessRegistry /* is IERC165 */ {
     error CollectionNotFound(uint256 toolId, uint256 index);
     error InvalidCollection(address collection);
     error NotToolCreator(uint256 toolId, address caller);
+    error UnsupportedStandardForSubscription(uint256 toolId, TokenStandard standard);
 
     // ──────────────────── Access Check ────────────────────
 
-    /// @notice Check whether `user` has access to `toolId`.
+    /// @notice Check whether `account` has access to `toolId`.
     /// @dev For OPEN tools, MUST return `true` unconditionally.
-    ///      For NFT_GATED tools, returns `true` if user holds a token from
+    ///      For NFT_GATED tools, returns `true` if `account` holds a token from
     ///      ANY bound collection (OR logic, not AND).
-    ///      ERC-721: checks `balanceOf(user) > 0` on the collection.
-    ///      ERC-1155: checks `balanceOf(user, tokenId) > 0`.
+    ///      ERC-721: checks `balanceOf(account) > 0` on the collection.
+    ///      ERC-1155: checks `balanceOf(account, tokenId) > 0`.
     ///      For SUBSCRIPTION tools, additionally checks that
     ///      `IERC5643(collection).expiresAt(tokenId) > block.timestamp`.
     ///      Expired subscriptions MUST return `false`.
-    function hasAccess(address user, uint256 toolId) external view returns (bool);
+    ///      Argument order matches `IToolRegistry.hasAccess` so a single
+    ///      contract MAY implement both interfaces with one function body.
+    function hasAccess(uint256 toolId, address account) external view returns (bool);
 
     /// @notice Check access using a caller-supplied tokenId for SUBSCRIPTION expiry.
     /// @dev For SUBSCRIPTION tools with ERC-721 collections, the basic `hasAccess`
     ///      cannot determine which tokenId to check `expiresAt` on (since `balanceOf`
     ///      only confirms ownership of *some* token). This function allows the caller
     ///      to supply the specific tokenId they hold. For NFT_GATED tools, the proof
-    ///      tokenId is ignored — `binding.tokenId` is always used.
-    /// @param user     The account to check.
+    ///      tokenId is ignored; `binding.tokenId` is always used.
     /// @param toolId   The tool to check access for.
+    /// @param account  The account to check.
     /// @param tokenId  The caller's specific tokenId for subscription expiry verification.
-    function hasAccessWithProof(address user, uint256 toolId, uint256 tokenId) external view returns (bool);
+    function hasAccessWithProof(uint256 toolId, address account, uint256 tokenId) external view returns (bool);
 
     // ──────────────────── Collection Management ────────────────────
 
     /// @notice Bind an NFT collection to a tool. Tool creator only.
-    /// @dev A tool MAY have at most MAX_COLLECTIONS (20) bindings.
+    /// @dev A tool MUST have at most `MAX_COLLECTIONS()` bindings.
+    ///      MUST revert with `UnsupportedStandardForSubscription` if `standard`
+    ///      is `ERC1155` and the tool's `accessMode` is `SUBSCRIPTION`.
     function addCollection(
         uint256 toolId,
         address collection,
@@ -437,6 +458,58 @@ interface IToolAccessRegistry /* is IERC165 */ {
 }
 ```
 
+### Interface IDs
+
+Each interface in this standard declares an ERC-165 interface ID. Per ERC-165, the interface ID is the XOR of the 4-byte function selectors of every external/public function declared on the interface. Events, errors, structs, and enums are not selectors and are excluded from the XOR. Inherited interfaces (e.g., `IERC165` itself) are not included in the reported ID unless explicitly noted.
+
+A function selector is `bytes4(keccak256(canonicalSignature))`, where enum parameters are encoded as their underlying integer type (e.g., `AccessMode` becomes `uint8`) and struct parameters use their canonical tuple encoding. The selectors used for each interface in this standard are listed below. Reference implementations MUST verify that `supportsInterface(id)` returns `true` for the listed `id`.
+
+**`IToolRegistry`** (ID: `0x41a32136`): XOR of
+
+- `registerTool(string,uint8)`
+- `updateToolMetadata(uint256,string)`
+- `deactivateTool(uint256)`
+- `reactivateTool(uint256)`
+- `getToolConfig(uint256)`
+- `hasAccess(uint256,address)`
+- `toolCount()`
+
+**`IToolAccessRegistry`** (ID: `0x542e220b`): XOR of
+
+- `MAX_COLLECTIONS()`
+- `hasAccess(uint256,address)`
+- `hasAccessWithProof(uint256,address,uint256)`
+- `addCollection(uint256,address,uint8,uint256)`
+- `removeCollection(uint256,uint256)`
+- `getCollections(uint256)`
+
+Note: `IToolRegistry.hasAccess` and `IToolAccessRegistry.hasAccess` intentionally share the same selector so a single contract implementing both interfaces provides one function body.
+
+**`IGatewayKeyRegistry`** (ID: `0xf5c37176`): XOR of
+
+- `addGatewayKey(address)`
+- `removeGatewayKey(address)`
+- `isValidGatewayKey(address)`
+
+**`IExecutionReceiptRegistry`** (ID: `0x9e391f7c`): XOR of
+
+- `postBatch(bytes32,uint256)`
+- `verifyReceipt(bytes32,bytes32[],uint256,uint256)`
+- `getBatch(uint256)`
+- `batchCount()`
+
+**`IToolPayment`** (ID: `0xe1fc6949`): XOR of
+
+- `setPaymentConfig(uint256,address,uint256,address,uint256)`
+- `settlePayment(uint256,bytes32,address,uint256)`
+- `getPaymentConfig(uint256)`
+- `getBalance(uint256)`
+- `withdraw(uint256)`
+- `getPlatformBalance(uint256)`
+- `withdrawPlatformFees(uint256)`
+
+The reference implementation is the canonical source for computed values. Each ID is locked by a `test_interfaceId_<IInterface>_matchesSpec` test that asserts `type(I).interfaceId` against the value listed above; changes to any interface shape MUST be accompanied by a spec update.
+
 ## Rationale
 
 ### Open Access as a First-Class Mode
@@ -445,7 +518,7 @@ Making open access a first-class `AccessMode` enum variant (rather than "NFT-gat
 
 ### NFT-Gated Access Supports Existing Collections
 
-`addCollection()` binds *any* existing ERC-721 or ERC-1155 collection to a tool — no changes to the original NFT contract required. This adds utility to existing NFTs without new deployments.
+`addCollection()` binds *any* existing ERC-721 or ERC-1155 collection to a tool; no changes to the original NFT contract are required. This adds utility to existing NFTs without new deployments.
 
 ### Creator-Hosted Over Platform-Hosted
 
@@ -453,11 +526,11 @@ The standard specifies an endpoint URL and manifest schema, not a runtime. Creat
 
 ### Separate from ERC-8004
 
-Agents need identity, reputation, and validation. Tools need access control, endpoint discovery, and I/O schemas. A standalone ERC that composes with ERC-8004 keeps both standards focused and allows independent evolution.
+Agents and tools differ in ownership (agents are autonomous; tools are creator-operated), lifecycle (tools version and deactivate independently of any agent), and access control (tools need NFT-gated and subscription-gated invocation as first-class modes). A standalone registry that composes with ERC-8004 keeps both standards focused and lets each evolve independently.
 
 ### Declared Payment Protocols Over Prescribed Mechanisms
 
-Creators declare accepted payment protocols via the `protocols` array. New protocols can be adopted without changes to the registry standard. Gateway key management and execution receipts are orthogonal — see [Appendix A](#appendix-a-extension-interfaces).
+Creators declare accepted payment protocols via the `protocols` array. New protocols can be adopted without changes to the registry standard. Gateway key management and execution receipts are orthogonal; see [Appendix A](#appendix-a-extension-interfaces).
 
 ### Subscription as a First-Class Access Mode
 
@@ -483,21 +556,27 @@ An attacker could flash-loan an NFT to pass `hasAccess()` and return it in the s
 
 ### Malicious Tool Endpoints
 
-Gateways MUST enforce `timeout_seconds`. Gateways SHOULD validate responses against the declared `outputs` schema and SHOULD NOT forward raw error messages to users.
+Gateways MUST enforce `timeoutSeconds`. Gateways SHOULD validate responses against the declared `outputs` schema and SHOULD NOT forward raw error messages to users.
 
 ### Front-Running Tool Registration
 
-Tool IDs are auto-incrementing counters, not user-chosen, so there is no name-squatting vector. Metadata is stored offchain in the Tool Registration File.
+Tool IDs are auto-incrementing counters, not user-chosen, so there is no name-squatting vector. Metadata is stored offchain in the Tool Manifest.
 
 ### Metadata URI Mutability
 
-Creators can update `metadataURI` at any time. The `AccessMode` is stored onchain and cannot be changed via metadata alone. All updates emit `ToolMetadataUpdated` for auditability. Gateways SHOULD cache and diff metadata.
+Creators can update `metadataURI` at any time. The `AccessMode` is stored onchain and cannot be changed via metadata alone, but every other manifest field, including `endpoint`, `pricing.token`, `pricing.chainId`, `pricing.amount`, and `inputs`/`outputs` schemas, can change silently on a metadata update. A creator who builds reputation on a benign manifest could swap the endpoint or redirect payments to a different chain/token after the fact, creating a rug vector against existing users.
+
+Mitigations:
+
+- `ToolMetadataUpdated` emits both `oldURI` and `newURI` so gateways and indexers can diff the full manifest on every update.
+- Gateways MUST re-fetch and re-validate the manifest on every `ToolMetadataUpdated` event before continuing to route requests. Gateways SHOULD alert or halt routing when pricing-critical fields (`token`, `chainId`, `amount`, `maxAmount`) change.
+- Agents and agent frameworks SHOULD pin a specific manifest hash or content-addressed URI (IPFS/Arweave) for repeated invocations rather than trusting the current `metadataURI` indefinitely.
 
 For stronger immutability, the `metadataURI` supports: **IPFS** (`ipfs://<CID>`), **Arweave** (`ar://<hash>`), **inline** (`data:application/json;base64,...`), and **`web3://`** ([ERC-4804](https://eips.ethereum.org/EIPS/eip-4804)). Gateways MUST support resolving `https://`, `ipfs://`, `ar://`, `data:`, and `web3://` URIs.
 
 ### Subscription Expiration Race Conditions
 
-A subscription may expire mid-invocation. Implementations SHOULD treat `expiresAt(tokenId) < block.timestamp + timeout_seconds` as insufficient access. Creators MAY provide a grace period to avoid penalizing users whose subscriptions expire during tool execution.
+A subscription may expire mid-invocation. Gateways SHOULD reject an invocation when `expiresAt(tokenId) < block.timestamp + timeoutSeconds`, so that a subscription cannot expire while the tool is still running. Creators MAY set `gracePeriodSeconds` in the manifest to extend access past `expiresAt` by that many seconds, avoiding penalization of users whose subscriptions lapse during or immediately before an invocation. When `gracePeriodSeconds > 0`, gateways SHOULD treat access as valid while `expiresAt(tokenId) + gracePeriodSeconds >= block.timestamp + timeoutSeconds`.
 
 ## Appendix A: Extension Interfaces
 
@@ -564,7 +643,7 @@ Gateways MAY post verifiable proofs of tool execution onchain as batched Merkle 
 
 ```solidity
 /// @notice Canonical offchain schema for execution receipts. The registry does
-///         not validate field semantics onchain — receipts are hashed offchain
+///         not validate field semantics onchain; receipts are hashed offchain
 ///         and verified via Merkle proof against a posted root.
 struct ExecutionReceipt {
     bytes32 invocationId;   // Matches the invocation token
@@ -742,12 +821,12 @@ Since the registry contract cannot read state from a remote chain, a registered 
 /// @notice Gateway-signed proof of NFT ownership on a remote chain.
 struct CrossChainProof {
     uint256 toolId;             // Tool being accessed
-    address user;               // Account claiming access
+    address account;            // Account claiming access
     uint256 chainId;            // Remote chain where balance was checked
     address collection;         // NFT contract on the remote chain
-    uint256 tokenId;            // Token ID held by the user
-    uint64 checkedAt;           // Timestamp when balance was verified offchain
-    uint64 expiresAt;           // Subscription expiry (0 if not SUBSCRIPTION mode)
+    uint256 tokenId;            // Token ID held by the account
+    uint256 checkedAt;          // Timestamp when balance was verified offchain
+    uint256 expiresAt;          // Subscription expiry (0 if not SUBSCRIPTION mode)
     bytes gatewaySignature;     // EIP-712 signature from a valid gateway key
 }
 ```
@@ -761,18 +840,18 @@ The `expiresAt` field is populated from the remote chain's `IERC5643.expiresAt(t
 /// @dev Verification steps:
 ///   1. Recover signer from EIP-712 signature.
 ///   2. Verify signer is a valid key in IGatewayKeyRegistry.
-///   3. Verify proof.toolId, proof.user, proof.chainId, proof.collection
+///   3. Verify proof.toolId, proof.account, proof.chainId, proof.collection
 ///      match a registered CrossChainBinding for the tool.
 ///   4. Verify proof.checkedAt is within the staleness window
 ///      (block.timestamp - proof.checkedAt <= stalenessWindow).
 ///   5. For SUBSCRIPTION tools, verify proof.expiresAt > block.timestamp.
 ///   6. Return true if all checks pass.
-/// @param user    The account claiming access.
-/// @param toolId  The tool to check access for.
-/// @param proof   Gateway-signed cross-chain ownership proof.
+/// @param toolId   The tool to check access for.
+/// @param account  The account claiming access.
+/// @param proof    Gateway-signed cross-chain ownership proof.
 function hasAccessWithRemoteProof(
-    address user,
     uint256 toolId,
+    address account,
     CrossChainProof calldata proof
 ) external view returns (bool);
 ```
@@ -824,7 +903,7 @@ The user already trusts the gateway to check same-chain `balanceOf`, forward req
 
 ### B.8 Future Upgrade Path
 
-The gateway attestation model can be replaced with trustless storage proofs (e.g., [Herodotus](https://www.herodotus.dev/), [Lagrange](https://www.lagrange.dev/), [Axiom](https://www.axiom.xyz/)) without changing the external `hasAccessWithRemoteProof` interface — only the internal verification logic changes.
+The gateway attestation model can be replaced with trustless storage proofs (e.g., [Herodotus](https://www.herodotus.dev/), [Lagrange](https://www.lagrange.dev/), [Axiom](https://www.axiom.xyz/)) without changing the external `hasAccessWithRemoteProof` interface; only the internal verification logic changes.
 
 ## Copyright
 
