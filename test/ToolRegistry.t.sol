@@ -15,28 +15,31 @@ contract ToolRegistryTest is Test {
     address other = makeAddr("other");
     string constant META_URI = "https://example.com/tool.json";
     string constant META_URI_2 = "ipfs://QmUpdated";
+    bytes32 constant MANIFEST_HASH = keccak256("manifest-v1");
+    bytes32 constant MANIFEST_HASH_2 = keccak256("manifest-v2");
 
     function setUp() public {
         registry = new ToolRegistry();
-        accessRegistry = new ToolAccessRegistry(address(registry));
+        accessRegistry = new ToolAccessRegistry(address(registry), address(0));
         registry.initialize(address(accessRegistry));
     }
 
     function test_registerTool_open() public {
         vm.prank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         assertEq(toolId, 1);
 
         ToolConfig memory config = registry.getToolConfig(toolId);
         assertEq(config.creator, creator);
         assertEq(config.metadataURI, META_URI);
+        assertEq(config.manifestHash, MANIFEST_HASH);
         assertEq(uint256(config.accessMode), uint256(AccessMode.OPEN));
         assertTrue(config.active);
     }
 
     function test_registerTool_nftGated() public {
         vm.prank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.NFT_GATED);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.NFT_GATED);
         assertEq(toolId, 1);
 
         ToolConfig memory config = registry.getToolConfig(toolId);
@@ -45,7 +48,7 @@ contract ToolRegistryTest is Test {
 
     function test_registerTool_subscription() public {
         vm.prank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.SUBSCRIPTION);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.SUBSCRIPTION);
         assertEq(toolId, 1);
 
         ToolConfig memory config = registry.getToolConfig(toolId);
@@ -54,9 +57,9 @@ contract ToolRegistryTest is Test {
 
     function test_registerTool_autoIncrementingIds() public {
         vm.startPrank(creator);
-        uint256 id1 = registry.registerTool(META_URI, AccessMode.OPEN);
-        uint256 id2 = registry.registerTool(META_URI, AccessMode.OPEN);
-        uint256 id3 = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 id1 = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
+        uint256 id2 = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
+        uint256 id3 = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         vm.stopPrank();
 
         assertEq(id1, 1);
@@ -67,55 +70,70 @@ contract ToolRegistryTest is Test {
     function test_registerTool_emitsEvent() public {
         vm.prank(creator);
         vm.expectEmit(true, true, false, true);
-        emit IToolRegistry.ToolRegistered(1, creator, AccessMode.OPEN);
-        registry.registerTool(META_URI, AccessMode.OPEN);
+        emit IToolRegistry.ToolRegistered(1, creator, AccessMode.OPEN, MANIFEST_HASH);
+        registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
     }
 
     function test_registerTool_revertsOnEmptyURI() public {
         vm.prank(creator);
         vm.expectRevert(IToolRegistry.InvalidMetadataURI.selector);
-        registry.registerTool("", AccessMode.OPEN);
+        registry.registerTool("", MANIFEST_HASH, AccessMode.OPEN);
+    }
+
+    function test_registerTool_revertsOnZeroManifestHash() public {
+        vm.prank(creator);
+        vm.expectRevert(IToolRegistry.InvalidManifestHash.selector);
+        registry.registerTool(META_URI, bytes32(0), AccessMode.OPEN);
     }
 
     function test_updateToolMetadata() public {
         vm.startPrank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
 
         vm.expectEmit(true, false, false, true);
-        emit IToolRegistry.ToolMetadataUpdated(toolId, META_URI, META_URI_2);
-        registry.updateToolMetadata(toolId, META_URI_2);
+        emit IToolRegistry.ToolMetadataUpdated(toolId, META_URI, META_URI_2, MANIFEST_HASH, MANIFEST_HASH_2);
+        registry.updateToolMetadata(toolId, META_URI_2, MANIFEST_HASH_2);
         vm.stopPrank();
 
         ToolConfig memory config = registry.getToolConfig(toolId);
         assertEq(config.metadataURI, META_URI_2);
+        assertEq(config.manifestHash, MANIFEST_HASH_2);
     }
 
     function test_updateToolMetadata_revertsIfNotCreator() public {
         vm.prank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
 
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSelector(IToolRegistry.NotToolCreator.selector, toolId, other));
-        registry.updateToolMetadata(toolId, META_URI_2);
+        registry.updateToolMetadata(toolId, META_URI_2, MANIFEST_HASH_2);
     }
 
     function test_updateToolMetadata_revertsOnEmptyURI() public {
         vm.startPrank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         vm.expectRevert(IToolRegistry.InvalidMetadataURI.selector);
-        registry.updateToolMetadata(toolId, "");
+        registry.updateToolMetadata(toolId, "", MANIFEST_HASH_2);
+        vm.stopPrank();
+    }
+
+    function test_updateToolMetadata_revertsOnZeroManifestHash() public {
+        vm.startPrank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
+        vm.expectRevert(IToolRegistry.InvalidManifestHash.selector);
+        registry.updateToolMetadata(toolId, META_URI_2, bytes32(0));
         vm.stopPrank();
     }
 
     function test_updateToolMetadata_revertsIfNotFound() public {
         vm.prank(creator);
         vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolNotFound.selector, 999));
-        registry.updateToolMetadata(999, META_URI_2);
+        registry.updateToolMetadata(999, META_URI_2, MANIFEST_HASH_2);
     }
 
     function test_deactivateTool() public {
         vm.startPrank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
 
         vm.expectEmit(true, false, false, false);
         emit IToolRegistry.ToolDeactivated(toolId);
@@ -128,7 +146,7 @@ contract ToolRegistryTest is Test {
 
     function test_deactivateTool_revertsIfAlreadyInactive() public {
         vm.startPrank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         registry.deactivateTool(toolId);
 
         vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolAlreadyInactive.selector, toolId));
@@ -138,7 +156,7 @@ contract ToolRegistryTest is Test {
 
     function test_deactivateTool_revertsIfNotCreator() public {
         vm.prank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
 
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSelector(IToolRegistry.NotToolCreator.selector, toolId, other));
@@ -147,7 +165,7 @@ contract ToolRegistryTest is Test {
 
     function test_reactivateTool() public {
         vm.startPrank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         registry.deactivateTool(toolId);
 
         vm.expectEmit(true, false, false, false);
@@ -161,7 +179,7 @@ contract ToolRegistryTest is Test {
 
     function test_reactivateTool_revertsIfAlreadyActive() public {
         vm.startPrank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
 
         vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolAlreadyActive.selector, toolId));
         registry.reactivateTool(toolId);
@@ -170,7 +188,7 @@ contract ToolRegistryTest is Test {
 
     function test_reactivateTool_revertsIfNotCreator() public {
         vm.prank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         vm.prank(creator);
         registry.deactivateTool(toolId);
 
@@ -186,10 +204,20 @@ contract ToolRegistryTest is Test {
 
     function test_hasAccess_openToolReturnsTrue() public {
         vm.prank(creator);
-        uint256 toolId = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
 
         assertTrue(registry.hasAccess(toolId, other));
         assertTrue(registry.hasAccess(toolId, address(0)));
+    }
+
+    /// @dev Locks the normative behavior at the IToolRegistry layer that
+    ///      SUBSCRIPTION tools return false from hasAccess. The ToolAccessRegistry
+    ///      layer has the same guarantee; this test ensures the top-level
+    ///      delegate also short-circuits rather than silently admitting.
+    function test_hasAccess_subscriptionToolReturnsFalse() public {
+        vm.prank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.SUBSCRIPTION);
+        assertFalse(registry.hasAccess(toolId, other));
     }
 
     function test_hasAccess_revertsIfNotFound() public {
@@ -200,7 +228,7 @@ contract ToolRegistryTest is Test {
     function test_hasAccess_revertsIfNotInitialized() public {
         ToolRegistry uninitRegistry = new ToolRegistry();
         vm.prank(creator);
-        uint256 toolId = uninitRegistry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 toolId = uninitRegistry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
 
         vm.expectRevert(ToolRegistry.NotInitialized.selector);
         uninitRegistry.hasAccess(toolId, other);
@@ -208,7 +236,7 @@ contract ToolRegistryTest is Test {
 
     function test_initialize_emitsEvent() public {
         ToolRegistry fresh = new ToolRegistry();
-        ToolAccessRegistry freshAccess = new ToolAccessRegistry(address(fresh));
+        ToolAccessRegistry freshAccess = new ToolAccessRegistry(address(fresh), address(0));
 
         vm.expectEmit(false, false, false, true);
         emit ToolRegistry.Initialized(address(freshAccess));
@@ -219,10 +247,10 @@ contract ToolRegistryTest is Test {
         assertEq(registry.toolCount(), 0);
 
         vm.startPrank(creator);
-        registry.registerTool(META_URI, AccessMode.OPEN);
+        registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         assertEq(registry.toolCount(), 1);
 
-        registry.registerTool(META_URI, AccessMode.NFT_GATED);
+        registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.NFT_GATED);
         assertEq(registry.toolCount(), 2);
         vm.stopPrank();
     }
@@ -231,9 +259,9 @@ contract ToolRegistryTest is Test {
     ///      tools and tool IDs are never reused.
     function test_toolCount_includesDeactivatedTools() public {
         vm.startPrank(creator);
-        uint256 id1 = registry.registerTool(META_URI, AccessMode.OPEN);
-        uint256 id2 = registry.registerTool(META_URI, AccessMode.OPEN);
-        uint256 id3 = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 id1 = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
+        uint256 id2 = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
+        uint256 id3 = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         assertEq(registry.toolCount(), 3);
 
         registry.deactivateTool(id2);
@@ -244,7 +272,7 @@ contract ToolRegistryTest is Test {
         assertEq(registry.toolCount(), 3);
 
         // New registration gets the next sequential ID (4), never reusing 1/2/3
-        uint256 id4 = registry.registerTool(META_URI, AccessMode.OPEN);
+        uint256 id4 = registry.registerTool(META_URI, MANIFEST_HASH, AccessMode.OPEN);
         assertEq(id4, 4);
         assertEq(registry.toolCount(), 4);
         vm.stopPrank();
@@ -258,7 +286,7 @@ contract ToolRegistryTest is Test {
     ///      fails, the spec's `IToolRegistry` ID must be updated to match the
     ///      value printed in the failure message.
     function test_interfaceId_IToolRegistry_matchesSpec() public pure {
-        assertEq(type(IToolRegistry).interfaceId, bytes4(0x41a32136));
+        assertEq(type(IToolRegistry).interfaceId, bytes4(0x1d6a0290));
     }
 
     function test_supportsInterface_ERC165() public view {

@@ -34,24 +34,37 @@ contract ToolRegistry is IToolRegistry, ERC165 {
         emit Initialized(_accessRegistry);
     }
 
-    function registerTool(string calldata metadataURI, AccessMode accessMode) external returns (uint256 toolId) {
+    function registerTool(string calldata metadataURI, bytes32 manifestHash, AccessMode accessMode)
+        external
+        returns (uint256 toolId)
+    {
         if (bytes(metadataURI).length == 0) revert InvalidMetadataURI();
+        if (manifestHash == bytes32(0)) revert InvalidManifestHash();
 
         toolId = _nextToolId++;
-        _tools[toolId] =
-            ToolConfig({creator: msg.sender, metadataURI: metadataURI, accessMode: accessMode, active: true});
+        _tools[toolId] = ToolConfig({
+            creator: msg.sender,
+            metadataURI: metadataURI,
+            manifestHash: manifestHash,
+            accessMode: accessMode,
+            active: true
+        });
 
-        emit ToolRegistered(toolId, msg.sender, accessMode);
+        emit ToolRegistered(toolId, msg.sender, accessMode, manifestHash);
     }
 
-    function updateToolMetadata(uint256 toolId, string calldata newURI) external {
+    function updateToolMetadata(uint256 toolId, string calldata newURI, bytes32 newHash) external {
         _requireExists(toolId);
         _requireCreator(toolId);
         if (bytes(newURI).length == 0) revert InvalidMetadataURI();
+        if (newHash == bytes32(0)) revert InvalidManifestHash();
 
-        string memory oldURI = _tools[toolId].metadataURI;
-        _tools[toolId].metadataURI = newURI;
-        emit ToolMetadataUpdated(toolId, oldURI, newURI);
+        ToolConfig storage tool = _tools[toolId];
+        string memory oldURI = tool.metadataURI;
+        bytes32 oldHash = tool.manifestHash;
+        tool.metadataURI = newURI;
+        tool.manifestHash = newHash;
+        emit ToolMetadataUpdated(toolId, oldURI, newURI, oldHash, newHash);
     }
 
     function deactivateTool(uint256 toolId) external {
@@ -84,6 +97,11 @@ contract ToolRegistry is IToolRegistry, ERC165 {
     function hasAccess(uint256 toolId, address account) external view returns (bool) {
         _requireExists(toolId);
         if (address(accessRegistry) == address(0)) revert NotInitialized();
+        // Short-circuit SUBSCRIPTION locally: the spec mandates `false`
+        // unconditionally, so avoid a redundant cross-contract round-trip
+        // (accessRegistry.hasAccess would re-fetch the same ToolConfig only
+        // to short-circuit itself).
+        if (_tools[toolId].accessMode == AccessMode.SUBSCRIPTION) return false;
         return accessRegistry.hasAccess(toolId, account);
     }
 

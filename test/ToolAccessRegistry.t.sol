@@ -4,16 +4,20 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {ToolRegistry} from "../src/ToolRegistry.sol";
 import {ToolAccessRegistry} from "../src/ToolAccessRegistry.sol";
+import {GatewayKeyRegistry} from "../src/GatewayKeyRegistry.sol";
 import {IToolAccessRegistry, CollectionBinding, TokenStandard} from "../src/interfaces/IToolAccessRegistry.sol";
 import {AccessMode} from "../src/interfaces/IToolRegistry.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {MockERC721} from "./mocks/MockERC721.sol";
 import {MockERC1155} from "./mocks/MockERC1155.sol";
 import {MockERC5643} from "./mocks/MockERC5643.sol";
+import {RevertingERC721} from "./mocks/RevertingERC721.sol";
+import {RevertingERC1155} from "./mocks/RevertingERC1155.sol";
 
 contract ToolAccessRegistryTest is Test {
     ToolRegistry public registry;
     ToolAccessRegistry public accessRegistry;
+    GatewayKeyRegistry public keyRegistry;
     MockERC721 public mockERC721;
     MockERC1155 public mockERC1155;
     MockERC5643 public mockERC5643;
@@ -22,10 +26,12 @@ contract ToolAccessRegistryTest is Test {
     address user = makeAddr("user");
     address other = makeAddr("other");
     string constant META_URI = "https://example.com/tool.json";
+    bytes32 constant MANIFEST_HASH = keccak256("manifest-v1");
 
     function setUp() public {
         registry = new ToolRegistry();
-        accessRegistry = new ToolAccessRegistry(address(registry));
+        keyRegistry = new GatewayKeyRegistry(address(this));
+        accessRegistry = new ToolAccessRegistry(address(registry), address(keyRegistry));
         registry.initialize(address(accessRegistry));
 
         mockERC721 = new MockERC721();
@@ -35,7 +41,7 @@ contract ToolAccessRegistryTest is Test {
 
     function _registerTool(AccessMode mode) internal returns (uint256) {
         vm.prank(creator);
-        return registry.registerTool(META_URI, mode);
+        return registry.registerTool(META_URI, MANIFEST_HASH, mode);
     }
 
     // --- OPEN access ---
@@ -99,8 +105,9 @@ contract ToolAccessRegistryTest is Test {
     }
 
     // --- SUBSCRIPTION access ---
+    // hasAccess() MUST return false for SUBSCRIPTION tools; use hasAccessWithProof.
 
-    function test_hasAccess_subscription_active() public {
+    function test_hasAccess_subscription_alwaysReturnsFalse() public {
         uint256 toolId = _registerTool(AccessMode.SUBSCRIPTION);
         vm.prank(creator);
         accessRegistry.addCollection(toolId, address(mockERC5643), TokenStandard.ERC721, 0);
@@ -108,38 +115,52 @@ contract ToolAccessRegistryTest is Test {
         uint64 futureExpiry = uint64(block.timestamp + 365 days);
         mockERC5643.mint(user, futureExpiry);
 
-        assertTrue(accessRegistry.hasAccess(toolId, user));
+        // Even with a valid, active subscription, basic hasAccess returns false
+        // because it cannot disambiguate the caller's tokenId.
+        assertFalse(accessRegistry.hasAccess(toolId, user));
     }
 
-    function test_hasAccess_subscription_expired() public {
+    function test_hasAccessWithProof_subscription_active() public {
+        uint256 toolId = _registerTool(AccessMode.SUBSCRIPTION);
+        vm.prank(creator);
+        accessRegistry.addCollection(toolId, address(mockERC5643), TokenStandard.ERC721, 0);
+
+        uint64 futureExpiry = uint64(block.timestamp + 365 days);
+        uint256 tokenId = mockERC5643.mint(user, futureExpiry);
+
+        assertTrue(accessRegistry.hasAccessWithProof(toolId, user, tokenId));
+    }
+
+    function test_hasAccessWithProof_subscription_expired() public {
         uint256 toolId = _registerTool(AccessMode.SUBSCRIPTION);
         vm.prank(creator);
         accessRegistry.addCollection(toolId, address(mockERC5643), TokenStandard.ERC721, 0);
 
         uint64 pastExpiry = uint64(block.timestamp - 1);
-        mockERC5643.mint(user, pastExpiry);
+        uint256 tokenId = mockERC5643.mint(user, pastExpiry);
 
-        assertFalse(accessRegistry.hasAccess(toolId, user));
+        assertFalse(accessRegistry.hasAccessWithProof(toolId, user, tokenId));
     }
 
-    function test_hasAccess_subscription_expiresExactlyNow() public {
+    function test_hasAccessWithProof_subscription_expiresExactlyNow() public {
         uint256 toolId = _registerTool(AccessMode.SUBSCRIPTION);
         vm.prank(creator);
         accessRegistry.addCollection(toolId, address(mockERC5643), TokenStandard.ERC721, 0);
 
         uint64 nowExpiry = uint64(block.timestamp);
-        mockERC5643.mint(user, nowExpiry);
+        uint256 tokenId = mockERC5643.mint(user, nowExpiry);
 
         // expiresAt must be > block.timestamp, not >=
-        assertFalse(accessRegistry.hasAccess(toolId, user));
+        assertFalse(accessRegistry.hasAccessWithProof(toolId, user, tokenId));
     }
 
-    function test_hasAccess_subscription_noToken() public {
+    function test_hasAccessWithProof_subscription_noToken() public {
         uint256 toolId = _registerTool(AccessMode.SUBSCRIPTION);
         vm.prank(creator);
         accessRegistry.addCollection(toolId, address(mockERC5643), TokenStandard.ERC721, 0);
 
-        assertFalse(accessRegistry.hasAccess(toolId, user));
+        // User holds no subscription token; any tokenId they pass fails the ownership check.
+        assertFalse(accessRegistry.hasAccessWithProof(toolId, user, 0));
     }
 
     // --- Multiple collections (OR logic) ---
@@ -168,6 +189,95 @@ contract ToolAccessRegistryTest is Test {
         vm.stopPrank();
 
         assertFalse(accessRegistry.hasAccess(toolId, user));
+    }
+
+    // --- Revert resilience (M1) ---
+
+    function test_hasAccess_nftGated_erc721_revertingCollectionDoesNotDoS() public {
+        uint256 toolId = _registerTool(AccessMode.NFT_GATED);
+        RevertingERC721 bad = new RevertingERC721();
+
+        // Order matters: the reverting collection is bound FIRST so a
+        // non-resilient loop would bail before reaching the legit binding.
+        vm.startPrank(creator);
+        accessRegistry.addCollection(toolId, address(bad), TokenStandard.ERC721, 0);
+        accessRegistry.addCollection(toolId, address(mockERC721), TokenStandard.ERC721, 0);
+        vm.stopPrank();
+
+        mockERC721.mint(user);
+        assertTrue(accessRegistry.hasAccess(toolId, user));
+    }
+
+    function test_hasAccess_nftGated_erc1155_revertingCollectionDoesNotDoS() public {
+        uint256 toolId = _registerTool(AccessMode.NFT_GATED);
+        RevertingERC1155 bad = new RevertingERC1155();
+
+        vm.startPrank(creator);
+        accessRegistry.addCollection(toolId, address(bad), TokenStandard.ERC1155, 1);
+        accessRegistry.addCollection(toolId, address(mockERC1155), TokenStandard.ERC1155, 1);
+        vm.stopPrank();
+
+        mockERC1155.mint(user, 1, 1);
+        assertTrue(accessRegistry.hasAccess(toolId, user));
+    }
+
+    function test_hasAccess_nftGated_allRevertingReturnsFalse() public {
+        uint256 toolId = _registerTool(AccessMode.NFT_GATED);
+        RevertingERC721 bad721 = new RevertingERC721();
+        RevertingERC1155 bad1155 = new RevertingERC1155();
+
+        vm.startPrank(creator);
+        accessRegistry.addCollection(toolId, address(bad721), TokenStandard.ERC721, 0);
+        accessRegistry.addCollection(toolId, address(bad1155), TokenStandard.ERC1155, 1);
+        vm.stopPrank();
+
+        // All bindings revert on balanceOf; hasAccess should return false,
+        // not bubble up the inner revert.
+        assertFalse(accessRegistry.hasAccess(toolId, user));
+    }
+
+    /// @dev Mirrors the three hasAccess resilience cases against
+    ///      hasAccessWithProof. The impl routes both through `_checkAccess`,
+    ///      so these pin the spec's per-function guarantee against a future
+    ///      refactor that splits the paths.
+    function test_hasAccessWithProof_nftGated_erc721_revertingCollectionDoesNotDoS() public {
+        uint256 toolId = _registerTool(AccessMode.NFT_GATED);
+        RevertingERC721 bad = new RevertingERC721();
+
+        vm.startPrank(creator);
+        accessRegistry.addCollection(toolId, address(bad), TokenStandard.ERC721, 0);
+        accessRegistry.addCollection(toolId, address(mockERC721), TokenStandard.ERC721, 0);
+        vm.stopPrank();
+
+        mockERC721.mint(user);
+        // proofTokenId is ignored for NFT_GATED; any value works.
+        assertTrue(accessRegistry.hasAccessWithProof(toolId, user, 0));
+    }
+
+    function test_hasAccessWithProof_nftGated_erc1155_revertingCollectionDoesNotDoS() public {
+        uint256 toolId = _registerTool(AccessMode.NFT_GATED);
+        RevertingERC1155 bad = new RevertingERC1155();
+
+        vm.startPrank(creator);
+        accessRegistry.addCollection(toolId, address(bad), TokenStandard.ERC1155, 1);
+        accessRegistry.addCollection(toolId, address(mockERC1155), TokenStandard.ERC1155, 1);
+        vm.stopPrank();
+
+        mockERC1155.mint(user, 1, 1);
+        assertTrue(accessRegistry.hasAccessWithProof(toolId, user, 0));
+    }
+
+    function test_hasAccessWithProof_nftGated_allRevertingReturnsFalse() public {
+        uint256 toolId = _registerTool(AccessMode.NFT_GATED);
+        RevertingERC721 bad721 = new RevertingERC721();
+        RevertingERC1155 bad1155 = new RevertingERC1155();
+
+        vm.startPrank(creator);
+        accessRegistry.addCollection(toolId, address(bad721), TokenStandard.ERC721, 0);
+        accessRegistry.addCollection(toolId, address(bad1155), TokenStandard.ERC1155, 1);
+        vm.stopPrank();
+
+        assertFalse(accessRegistry.hasAccessWithProof(toolId, user, 0));
     }
 
     // --- addCollection ---
@@ -260,12 +370,11 @@ contract ToolAccessRegistryTest is Test {
 
         vm.expectEmit(true, true, false, false);
         emit IToolAccessRegistry.CollectionRemoved(toolId, address(mockERC721));
-        accessRegistry.removeCollection(toolId, 0);
+        accessRegistry.removeCollection(toolId, 0, address(mockERC721));
         vm.stopPrank();
 
         CollectionBinding[] memory bindings = accessRegistry.getCollections(toolId);
-        assertEq(bindings.length, 1);
-        assertFalse(bindings[0].active);
+        assertEq(bindings.length, 0);
     }
 
     function test_removeCollection_revertsOnInvalidIndex() public {
@@ -273,7 +382,7 @@ contract ToolAccessRegistryTest is Test {
 
         vm.prank(creator);
         vm.expectRevert(abi.encodeWithSelector(IToolAccessRegistry.CollectionNotFound.selector, toolId, 0));
-        accessRegistry.removeCollection(toolId, 0);
+        accessRegistry.removeCollection(toolId, 0, address(mockERC721));
     }
 
     function test_removeCollection_revertsIfNotCreator() public {
@@ -283,10 +392,10 @@ contract ToolAccessRegistryTest is Test {
 
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSelector(IToolAccessRegistry.NotToolCreator.selector, toolId, other));
-        accessRegistry.removeCollection(toolId, 0);
+        accessRegistry.removeCollection(toolId, 0, address(mockERC721));
     }
 
-    function test_removeCollection_softDelete() public {
+    function test_removeCollection_swapAndPop() public {
         uint256 toolId = _registerTool(AccessMode.NFT_GATED);
         MockERC721 nft2 = new MockERC721();
 
@@ -294,16 +403,16 @@ contract ToolAccessRegistryTest is Test {
         accessRegistry.addCollection(toolId, address(mockERC721), TokenStandard.ERC721, 0);
         accessRegistry.addCollection(toolId, address(nft2), TokenStandard.ERC721, 0);
 
-        accessRegistry.removeCollection(toolId, 0);
+        accessRegistry.removeCollection(toolId, 0, address(mockERC721));
         vm.stopPrank();
 
+        // Swap-and-pop: array shrinks, last element moves to index 0.
         CollectionBinding[] memory bindings = accessRegistry.getCollections(toolId);
-        assertEq(bindings.length, 2);
-        assertFalse(bindings[0].active);
-        assertTrue(bindings[1].active);
+        assertEq(bindings.length, 1);
+        assertEq(bindings[0].collection, address(nft2));
     }
 
-    function test_removeCollection_softDeletedBindingSkippedInAccess() public {
+    function test_removeCollection_removedBindingNotConsultedForAccess() public {
         uint256 toolId = _registerTool(AccessMode.NFT_GATED);
 
         vm.startPrank(creator);
@@ -314,7 +423,7 @@ contract ToolAccessRegistryTest is Test {
         assertTrue(accessRegistry.hasAccess(toolId, user));
 
         vm.prank(creator);
-        accessRegistry.removeCollection(toolId, 0);
+        accessRegistry.removeCollection(toolId, 0, address(mockERC721));
         assertFalse(accessRegistry.hasAccess(toolId, user));
     }
 
@@ -323,22 +432,38 @@ contract ToolAccessRegistryTest is Test {
 
         vm.startPrank(creator);
         accessRegistry.addCollection(toolId, address(mockERC721), TokenStandard.ERC721, 0);
-        accessRegistry.removeCollection(toolId, 0);
+        accessRegistry.removeCollection(toolId, 0, address(mockERC721));
 
         vm.expectRevert(abi.encodeWithSelector(IToolAccessRegistry.CollectionNotFound.selector, toolId, 0));
-        accessRegistry.removeCollection(toolId, 0);
+        accessRegistry.removeCollection(toolId, 0, address(mockERC721));
         vm.stopPrank();
     }
 
-    function test_removeCollection_softDeleteDoesNotExhaustSlotLimit() public {
+    function test_removeCollection_revertsOnMismatchedExpectedCollection() public {
+        uint256 toolId = _registerTool(AccessMode.NFT_GATED);
+        MockERC721 nft2 = new MockERC721();
+
+        vm.startPrank(creator);
+        accessRegistry.addCollection(toolId, address(mockERC721), TokenStandard.ERC721, 0);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IToolAccessRegistry.CollectionMismatch.selector, toolId, 0, address(nft2), address(mockERC721)
+            )
+        );
+        accessRegistry.removeCollection(toolId, 0, address(nft2));
+        vm.stopPrank();
+    }
+
+    function test_removeCollection_freesSlot() public {
         uint256 toolId = _registerTool(AccessMode.NFT_GATED);
         MockERC721 nft = new MockERC721();
 
         vm.startPrank(creator);
         accessRegistry.addCollection(toolId, address(nft), TokenStandard.ERC721, 0);
-        accessRegistry.removeCollection(toolId, 0);
+        accessRegistry.removeCollection(toolId, 0, address(nft));
 
-        // Should succeed; soft-deleted slot doesn't count toward limit
+        // Should succeed: swap-and-pop fully removes, so slot is reusable.
         accessRegistry.addCollection(toolId, address(nft), TokenStandard.ERC721, 0);
         vm.stopPrank();
     }
@@ -383,17 +508,24 @@ contract ToolAccessRegistryTest is Test {
 
     // --- Subscription with non-zero tokenId ---
 
-    function test_hasAccess_subscription_nonZeroTokenId() public {
-        uint256 toolId = _registerTool(AccessMode.SUBSCRIPTION);
-
-        // Mint tokenId 0 first (to someone else), then tokenId 1 to user
-        mockERC5643.mint(other, uint64(block.timestamp - 1));
-        uint256 userTokenId = mockERC5643.mint(user, uint64(block.timestamp + 365 days));
+    function test_addCollection_revertsOnErc721NonZeroTokenId() public {
+        uint256 toolId = _registerTool(AccessMode.NFT_GATED);
 
         vm.prank(creator);
-        accessRegistry.addCollection(toolId, address(mockERC5643), TokenStandard.ERC721, userTokenId);
+        vm.expectRevert(abi.encodeWithSelector(IToolAccessRegistry.InvalidCollection.selector, address(mockERC721)));
+        accessRegistry.addCollection(toolId, address(mockERC721), TokenStandard.ERC721, 42);
+    }
 
-        assertTrue(accessRegistry.hasAccess(toolId, user));
+    function test_addCollection_subscriptionRevertsOnErc721NonZeroTokenId() public {
+        uint256 toolId = _registerTool(AccessMode.SUBSCRIPTION);
+
+        // Even though SUBSCRIPTION tools conceptually use token-level checks,
+        // the tokenId stored in the binding is always ignored (the caller
+        // supplies the tokenId via `hasAccessWithProof`). Rejecting nonzero
+        // prevents dead state that would otherwise silently be ignored.
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(IToolAccessRegistry.InvalidCollection.selector, address(mockERC5643)));
+        accessRegistry.addCollection(toolId, address(mockERC5643), TokenStandard.ERC721, 42);
     }
 
     // --- hasAccessWithProof (F5 fix) ---
@@ -410,9 +542,9 @@ contract ToolAccessRegistryTest is Test {
         // Mint tokenId=1 to user (active)
         uint256 userTokenId = mockERC5643.mint(user, uint64(block.timestamp + 365 days));
 
-        // Without proof: checks binding.tokenId=0 which is expired
+        // hasAccess unconditionally returns false for SUBSCRIPTION tools
         assertFalse(accessRegistry.hasAccess(toolId, user));
-        // With proof: checks user's actual tokenId=1 which is active
+        // hasAccessWithProof verifies the caller's specific tokenId
         assertTrue(accessRegistry.hasAccessWithProof(toolId, user, userTokenId));
     }
 
@@ -472,7 +604,7 @@ contract ToolAccessRegistryTest is Test {
 
     /// @dev Locks the hardcoded interface ID declared in the ERC spec.
     function test_interfaceId_IToolAccessRegistry_matchesSpec() public pure {
-        assertEq(type(IToolAccessRegistry).interfaceId, bytes4(0x542e220b));
+        assertEq(type(IToolAccessRegistry).interfaceId, bytes4(0xc11217e9));
     }
 
     function test_supportsInterface_ERC165() public view {
