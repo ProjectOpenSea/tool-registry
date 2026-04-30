@@ -1,22 +1,19 @@
 # ERC-XXXX Agent Tool Registry: Reference Implementation
 
-Foundry reference implementation for the **ERC-XXXX Agent Tool Registry**: an onchain registry for AI agent tools with open, NFT-gated (same- and cross-chain), and subscription access modes.
+Foundry reference implementation for the **ERC-XXXX Agent Tool Registry**: a minimal onchain registry for AI agent tools with extensible predicate-based access control.
 
 ## Overview
 
-The standard defines how AI agents discover and access tools through a shared onchain registry that anyone may write to and anyone may read from. It introduces three access modes:
+The standard defines how AI agents discover and access tools through a shared onchain registry that anyone may write to and anyone may read from. Each tool optionally points to an access-predicate contract that gates invocation. The standard deliberately excludes payment, cross-chain gating, and subscription logic, keeping them as orthogonal concerns.
 
-- **OPEN**: anyone can invoke (free or paid per invocation)
-- **NFT_GATED**: caller must hold a token from a bound ERC-721 or ERC-1155 collection (same-chain by `balanceOf`, or cross-chain via a gateway-signed EIP-712 attestation)
-- **SUBSCRIPTION**: caller must hold an active ERC-5643 subscription NFT
+- **Open access**: `accessPredicate` is `address(0)` — anyone can invoke
+- **Predicate-gated**: `accessPredicate` points to an external contract implementing `IAccessPredicate` — any access model (NFT gating, subscriptions, allowlists, DAO votes, reputation scores) is expressible as a predicate contract without modifying the registry
 
 ## Contracts
 
 | Contract | Interfaces | Description |
 |---|---|---|
-| `ToolRegistry.sol` | `IToolRegistry` | Tool registration, metadata updates, lifecycle management, access delegation |
-| `ToolAccessRegistry.sol` | `IToolAccessRegistry`, `IToolAccessRegistryCrossChain` | Same-chain and cross-chain NFT-gating, collection bindings, subscription expiration checks |
-| `GatewayKeyRegistry.sol` | `IGatewayKeyRegistry` | Admin-managed gateway signing keys for EIP-712 cross-chain attestations. Required when cross-chain bindings are used; MAY be omitted otherwise |
+| `ToolRegistry.sol` | `IToolRegistry` | Tool registration, metadata updates, access delegation |
 
 ## Setup
 
@@ -40,18 +37,55 @@ forge test --gas-report
 
 ## Architecture
 
-`ToolRegistry` delegates all access checks to `ToolAccessRegistry` via the `IToolAccessRegistry.hasAccess()` interface. The two contracts are linked using a two-step initialization pattern to resolve the circular dependency. `ToolAccessRegistry` also takes an `IGatewayKeyRegistry` address for cross-chain attestation verification; pass `address(0)` if the deployment does not offer cross-chain bindings.
+`ToolRegistry` handles tool registration and metadata updates. Access checks are delegated to an external predicate contract via `staticcall`. If a tool's `accessPredicate` is `address(0)`, the tool is open-access. Otherwise, the registry calls `IAccessPredicate(accessPredicate).hasAccess(toolId, account, data)`. Creators who want to temporarily disable a tool point `accessPredicate` at an always-deny predicate rather than carry a dedicated pause flag.
 
-```solidity
-ToolRegistry registry = new ToolRegistry();
-GatewayKeyRegistry keyRegistry = new GatewayKeyRegistry(admin);
-ToolAccessRegistry accessRegistry = new ToolAccessRegistry(address(registry), address(keyRegistry));
-registry.initialize(address(accessRegistry));
+## Example predicates
+
+Reference predicates under `examples/` (not part of the canonical ERC). All multi-tenant: deploy once per chain and configure independently per tool — the predicate keys its config by `toolId` and pulls the authoritative creator from the registry on every write, so any tool creator can configure their own slot without an admin role.
+
+| Contract | Gate |
+|---|---|
+| `ERC721OwnerPredicate.sol` | Account owns ≥1 token (`balanceOf > 0`) in any of up to 10 configured ERC-721 collections |
+| `ERC1155OwnerPredicate.sol` | Account owns ≥1 of any configured `(collection, tokenId)` pair across up to 10 ERC-1155 collections |
+| `SubscriptionPredicate.sol` | NFT-tier-with-expiration subscription model |
+| `CompositePredicate.sol` | Combines up to 3 leaf `IAccessPredicate` contracts under AND-all / OR-any with optional per-term negation, fail-closed on sub-call failure |
+
+## Deploy
+
+`script/Deploy.s.sol` deploys `ToolRegistry`, `ERC721OwnerPredicate`, and `ERC1155OwnerPredicate` deterministically via the Arachnid keyless CREATE2 factory (pre-deployed at `0x4e59...956C` on every major chain). Re-running with the same salt is a no-op once the address is occupied; swapping in `_SALT` for a vanity salt later deploys the new address on chains that haven't seen it without disturbing existing chains.
+
+### Live addresses (v0.1 beta, salt `bytes32(uint256(1))`)
+
+| Contract | Base mainnet |
+|---|---|
+| `ToolRegistry` (v0.1) | [`0x7291BbFbC368C2D478eCe1eA30de31F612a34856`](https://basescan.org/address/0x7291bbfbc368c2d478ece1ea30de31f612a34856#code) |
+| `ERC721OwnerPredicate` (v0.1) | [`0x4eC929dcc11B8B3a7d32CD9360BE7B8C73077b88`](https://basescan.org/address/0x4ec929dcc11b8b3a7d32cd9360be7b8c73077b88#code) |
+| `ERC1155OwnerPredicate` (v0.1) | [`0x4961A1bee290b48Aee8EAC04d38E965f3636F549`](https://basescan.org/address/0x4961a1bee290b48aee8eac04d38e965f3636f549#code) |
+
+Each contract advertises its identity onchain via `name()` and `version()` (registry) or `name()` (predicates). See the EIP draft for the version-string format.
+
+### Run
+
+```bash
+cp .env.example .env       # fill in BASE_RPC_URL, ETHERSCAN_API_KEY, and one of DEPLOYER (+ keystore) or DEPLOYER_PRIVATE_KEY
+
+# Dry-run (simulation only)
+NETWORKS=base forge script script/Deploy.s.sol --sig "run()" -vvv
+
+# Broadcast + verify (keystore-based — preferred)
+cast wallet import beta-deployer --interactive   # one-time keystore import
+NETWORKS=base forge script script/Deploy.s.sol --sig "run()" -vvv \
+    --account beta-deployer --sender $DEPLOYER --broadcast --verify
+
+# Broadcast + verify (raw private key — one-shot)
+DEPLOYER_PRIVATE_KEY=0x... NETWORKS=base forge script script/Deploy.s.sol \
+    --sig "run()" -vvv --broadcast --verify
 ```
 
-For `OPEN` tools, `hasAccess()` returns `true` unconditionally. For `NFT_GATED` tools, it checks `balanceOf` on bound collections (OR logic: any collection grants access). For `SUBSCRIPTION` tools, callers use `hasAccessWithProof(toolId, account, tokenId)` which also checks `IERC5643.expiresAt(tokenId) > block.timestamp`. Cross-chain `NFT_GATED` bindings use `hasAccessWithRemoteProof(toolId, account, proof)`, which recovers the gateway signer from an EIP-712 attestation and verifies it against `GatewayKeyRegistry`.
+The deploy script reads `NETWORKS` (comma-separated keys from `[rpc_endpoints]` in `foundry.toml`) and forks each in turn. Verification uses the Etherscan v2 unified API key (`ETHERSCAN_API_KEY`), which works across all Etherscan-supported chains including Base.
 
 ## Dependencies
 
-- [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts): ERC-165, ERC-721, ERC-1155, ERC-20, Ownable
+- [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts): ERC-165
 - [Forge Std](https://github.com/foundry-rs/forge-std): testing utilities
+- [create2-helpers](https://github.com/emo-eth/create2-helpers): CREATE2 deploy script base

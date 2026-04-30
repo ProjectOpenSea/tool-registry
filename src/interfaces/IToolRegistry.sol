@@ -1,62 +1,67 @@
 // SPDX-License-Identifier: CC0-1.0
 pragma solidity ^0.8.24;
 
-/// @notice Access control mode for a registered tool.
-enum AccessMode {
-    OPEN,
-    NFT_GATED,
-    SUBSCRIPTION
-}
-
 /// @notice Onchain configuration for a registered tool.
 struct ToolConfig {
     address creator;
     string metadataURI;
     bytes32 manifestHash;
-    AccessMode accessMode;
-    bool active;
+    address accessPredicate;
 }
 
 /// @title IToolRegistry
-/// @notice Onchain registry for AI agent tools.
+/// @notice Minimal onchain registry for AI agent tools.
 /// @dev ERC-165 interface ID computed from type(IToolRegistry).interfaceId
 interface IToolRegistry {
-    event ToolRegistered(uint256 indexed toolId, address indexed creator, AccessMode accessMode, bytes32 manifestHash);
-    /// @notice Emitted when a tool's metadata URI and/or manifest hash is updated.
-    /// @dev Emits prior and new URI and hash so indexers and gateways can diff
-    ///      and commit without racing the creator. `manifestHash` is the binding
-    ///      commitment; `metadataURI` alone is mutable pointer state.
-    event ToolMetadataUpdated(uint256 indexed toolId, string oldURI, string newURI, bytes32 oldHash, bytes32 newHash);
-    event ToolDeactivated(uint256 indexed toolId);
-    event ToolReactivated(uint256 indexed toolId);
+    event ToolRegistered(
+        uint256 indexed toolId,
+        address indexed creator,
+        address indexed accessPredicate,
+        string metadataURI,
+        bytes32 manifestHash
+    );
+    event ToolMetadataUpdated(uint256 indexed toolId, string newURI, bytes32 newHash);
+    event AccessPredicateUpdated(uint256 indexed toolId, address indexed newPredicate);
 
     error ToolNotFound(uint256 toolId);
     error NotToolCreator(uint256 toolId, address caller);
-    error ToolAlreadyActive(uint256 toolId);
-    error ToolAlreadyInactive(uint256 toolId);
-    /// @notice The provided metadata URI is invalid.
-    /// @dev Implementations MUST revert with this error when `metadataURI` is
-    ///      the empty string. Implementations MAY additionally reject URIs
-    ///      that fail implementation-specific validation.
     error InvalidMetadataURI();
-    /// @notice The provided manifest hash is `bytes32(0)`.
-    /// @dev keccak256 of any real content cannot produce bytes32(0), so a zero
-    ///      hash is semantically meaningless as a commitment.
     error InvalidManifestHash();
 
-    function registerTool(string calldata metadataURI, bytes32 manifestHash, AccessMode accessMode)
+    /// @notice The provided access predicate does not implement IAccessPredicate.
+    /// @dev Reverts when the target contract claims ERC-165 support but either
+    ///      reports `false` for the IAccessPredicate interface ID or reverts
+    ///      when queried for it. Reverting on a supportsInterface query from a
+    ///      self-declared ERC-165 contract is non-conformant, so the registry
+    ///      treats it as a misconfigured predicate.
+    error InvalidAccessPredicate(address predicate);
+
+    function registerTool(string calldata metadataURI, bytes32 manifestHash, address accessPredicate)
         external
         returns (uint256 toolId);
     function updateToolMetadata(uint256 toolId, string calldata newURI, bytes32 newHash) external;
-    function deactivateTool(uint256 toolId) external;
-    function reactivateTool(uint256 toolId) external;
+    function setAccessPredicate(uint256 toolId, address newPredicate) external;
     function getToolConfig(uint256 toolId) external view returns (ToolConfig memory);
-    /// @dev If the tool is not `active`, MUST return false regardless of mode.
-    ///      For OPEN tools, MUST return true when active. For NFT_GATED,
-    ///      delegates to the Access Registry. For SUBSCRIPTION tools, MUST
-    ///      return false; `balanceOf` alone cannot disambiguate the tokenId
-    ///      needed to check ERC-5643 expiration. Consumers MUST use
-    ///      `IToolAccessRegistry.hasAccessWithProof` for SUBSCRIPTION tools.
-    function hasAccess(uint256 toolId, address account) external view returns (bool);
+    function hasAccess(uint256 toolId, address account, bytes calldata data) external view returns (bool);
+    function tryHasAccess(uint256 toolId, address account, bytes calldata data)
+        external
+        view
+        returns (bool ok, bool granted);
     function toolCount() external view returns (uint256);
+
+    /// @notice Returns a human-readable identifier for the registry implementation.
+    /// @dev MUST return a non-empty string. Format is implementation-defined;
+    ///      the reference implementation returns `"ToolRegistry"`. Consumers
+    ///      SHOULD treat the value as opaque except for equality comparison.
+    function name() external view returns (string memory);
+
+    /// @notice Returns the implementation's version string.
+    /// @dev MUST return a non-empty string. Format is implementation-defined;
+    ///      the reference implementation uses `MAJOR.MINOR` (e.g. `"0.1"` for
+    ///      pre-release, `"1.0"` for the first stable release, `"1.1"` /
+    ///      `"2.0"` for subsequent revisions). The scheme intentionally omits
+    ///      the patch component used in strict semver. Consumers SHOULD treat
+    ///      the value as opaque except for equality comparison; ordering
+    ///      semantics are implementation-defined.
+    function version() external view returns (string memory);
 }

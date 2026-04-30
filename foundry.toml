@@ -10,3 +10,9 @@ optimizer_runs = 200
 line_length = 120
 tab_width = 4
 bracket_spacing = false
+
+[rpc_endpoints]
+base = "${BASE_RPC_URL}"
+
+[etherscan]
+base = {key = "${ETHERSCAN_API_KEY}", chain = 8453}
