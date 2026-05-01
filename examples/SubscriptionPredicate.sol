@@ -167,6 +167,6 @@ contract SubscriptionPredicate is IAccessPredicate, ERC165 {
 
     /// @notice Implementation version; same `MAJOR.MINOR` scheme as `ToolRegistry`.
     function version() external pure returns (string memory) {
-        return "0.1";
+        return "0.2";
     }
 }

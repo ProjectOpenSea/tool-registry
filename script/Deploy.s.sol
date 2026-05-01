@@ -15,6 +15,13 @@ import {ERC1155OwnerPredicate} from "../examples/ERC1155OwnerPredicate.sol";
 ///      the address is occupied. Swap `_SALT` for a vanity salt later and
 ///      re-run — the script will deploy at the new address on chains that
 ///      have not yet seen it without disturbing existing deployments.
+///
+///      Pre-release policy: the script always deploys whatever bytecode the
+///      current source produces. If the registry source (or any of its
+///      imports) changes, the resulting CREATE2 address moves and a new
+///      registry is deployed; existing tools at the old registry are left in
+///      place but no longer canonical. Stabilise the registry address via a
+///      pinned constant once we cut a 1.0 release.
 contract Deploy is BaseCreate2Script {
     /// @dev Beta placeholder. Replace with a mined vanity salt before the
     ///      canonical multi-chain rollout — `_create2IfNotDeployed` will

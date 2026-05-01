@@ -372,7 +372,7 @@ contract SubscriptionPredicateTest is Test {
     }
 
     function test_version() public view {
-        assertEq(predicate.version(), "0.1");
+        assertEq(predicate.version(), "0.2");
     }
 
     // ── getRequirements ──────────────────────────────────────────────────

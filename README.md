@@ -2,6 +2,8 @@
 
 Foundry reference implementation for the **ERC-XXXX Agent Tool Registry**: a minimal onchain registry for AI agent tools with extensible predicate-based access control.
 
+Pairs with [`@opensea/tool-sdk`](https://github.com/ProjectOpenSea/tool-sdk) — the TypeScript SDK and CLI for authoring tool manifests, registering tools onchain, and gating tool endpoints against this registry.
+
 ## Overview
 
 The standard defines how AI agents discover and access tools through a shared onchain registry that anyone may write to and anyone may read from. Each tool optionally points to an access-predicate contract that gates invocation. The standard deliberately excludes payment, cross-chain gating, and subscription logic, keeping them as orthogonal concerns.
@@ -54,13 +56,13 @@ Reference predicates under `examples/` (not part of the canonical ERC). All mult
 
 `script/Deploy.s.sol` deploys `ToolRegistry`, `ERC721OwnerPredicate`, and `ERC1155OwnerPredicate` deterministically via the Arachnid keyless CREATE2 factory (pre-deployed at `0x4e59...956C` on every major chain). Re-running with the same salt is a no-op once the address is occupied; swapping in `_SALT` for a vanity salt later deploys the new address on chains that haven't seen it without disturbing existing chains.
 
-### Live addresses (v0.1 beta, salt `bytes32(uint256(1))`)
+### Live addresses (beta, salt `bytes32(uint256(1))`)
 
 | Contract | Base mainnet |
 |---|---|
 | `ToolRegistry` (v0.1) | [`0x7291BbFbC368C2D478eCe1eA30de31F612a34856`](https://basescan.org/address/0x7291bbfbc368c2d478ece1ea30de31f612a34856#code) |
-| `ERC721OwnerPredicate` (v0.1) | [`0x4eC929dcc11B8B3a7d32CD9360BE7B8C73077b88`](https://basescan.org/address/0x4ec929dcc11b8b3a7d32cd9360be7b8c73077b88#code) |
-| `ERC1155OwnerPredicate` (v0.1) | [`0x4961A1bee290b48Aee8EAC04d38E965f3636F549`](https://basescan.org/address/0x4961a1bee290b48aee8eac04d38e965f3636f549#code) |
+| `ERC721OwnerPredicate` (v0.2) | [`0xd1F703D0B90BB7106fAebBfbcAdD2B07BDc4c769`](https://basescan.org/address/0xd1f703d0b90bb7106faebbfbcadd2b07bdc4c769#code) |
+| `ERC1155OwnerPredicate` (v0.2) | [`0xc179b9d4D9B7ffe0CdA608134729f72003380A7e`](https://basescan.org/address/0xc179b9d4d9b7ffe0cda608134729f72003380a7e#code) |
 
 Each contract advertises its identity onchain via `name()` and `version()` (registry) or `name()` (predicates). See the EIP draft for the version-string format.
 
