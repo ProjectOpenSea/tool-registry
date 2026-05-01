@@ -4,12 +4,13 @@ pragma solidity ^0.8.25;
 import {Test} from "forge-std/Test.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {CompositePredicate} from "../examples/CompositePredicate.sol";
-import {IAccessPredicate} from "../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../src/interfaces/IAccessPredicate.sol";
 import {ToolRegistry} from "../src/ToolRegistry.sol";
 import {MockAccessPredicate} from "./mocks/MockAccessPredicate.sol";
 import {RevertingPredicate} from "./mocks/RevertingPredicate.sol";
 import {GasBurnerPredicate} from "./mocks/GasBurnerPredicate.sol";
 import {MalformedBoolPredicate} from "./mocks/MalformedBoolPredicate.sol";
+import {MockRequirementsPredicate} from "./mocks/MockRequirementsPredicate.sol";
 import {NonPredicateERC165} from "./mocks/NonPredicateERC165.sol";
 
 contract CompositePredicateTest is Test {
@@ -474,6 +475,106 @@ contract CompositePredicateTest is Test {
     function test_constructor_revertsOnZeroRegistry() public {
         vm.expectRevert("CompositePredicate: zero registry");
         new CompositePredicate(address(0));
+    }
+
+    // ── getRequirements ──────────────────────────────────────────────────
+
+    function test_getRequirements_emptyWhenNoTerms() public view {
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 0);
+        assertEq(uint256(logic), uint256(RequirementLogic.AND));
+    }
+
+    function test_getRequirements_flattensAllChildren() public {
+        CompositePredicate.Term[] memory terms = new CompositePredicate.Term[](2);
+        terms[0] = _term(address(leafA), false);
+        terms[1] = _term(address(leafB), false);
+        _setOp(toolId, CompositePredicate.Op.ALL, terms);
+
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        // MockAccessPredicate returns 0 requirements each
+        assertEq(reqs.length, 0);
+        assertEq(uint256(logic), uint256(RequirementLogic.AND));
+    }
+
+    function test_getRequirements_sentinelForRevertingChild() public {
+        RevertingPredicate reverter = new RevertingPredicate();
+        CompositePredicate.Term[] memory terms = new CompositePredicate.Term[](2);
+        terms[0] = _term(address(reverter), false);
+        terms[1] = _term(address(leafA), false);
+        _setOp(toolId, CompositePredicate.Op.ANY, terms);
+
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        // Reverting child produces a sentinel; leafA returns 0 reqs.
+        assertEq(reqs.length, 1);
+        assertEq(reqs[0].kind, bytes4(0));
+        assertEq(reqs[0].data, "");
+        assertEq(keccak256(bytes(reqs[0].label)), keccak256(bytes("unknown")));
+        assertEq(uint256(logic), uint256(RequirementLogic.OR));
+    }
+
+    function test_getRequirements_opAnyReturnsOR() public {
+        CompositePredicate.Term[] memory terms = new CompositePredicate.Term[](1);
+        terms[0] = _term(address(leafA), false);
+        _setOp(toolId, CompositePredicate.Op.ANY, terms);
+
+        (, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(uint256(logic), uint256(RequirementLogic.OR));
+    }
+
+    function test_getRequirements_flattensNonEmptyChildren() public {
+        MockRequirementsPredicate childA = new MockRequirementsPredicate();
+        MockRequirementsPredicate childB = new MockRequirementsPredicate();
+
+        // Configure childA with 1 requirement.
+        AccessRequirement[] memory reqsA = new AccessRequirement[](1);
+        reqsA[0] = AccessRequirement({kind: bytes4(0x11111111), data: hex"aa", label: "req-a"});
+        childA.setRequirements(reqsA);
+
+        // Configure childB with 2 requirements.
+        AccessRequirement[] memory reqsB = new AccessRequirement[](2);
+        reqsB[0] = AccessRequirement({kind: bytes4(0x22222222), data: hex"bb", label: "req-b1"});
+        reqsB[1] = AccessRequirement({kind: bytes4(0x33333333), data: hex"cc", label: "req-b2"});
+        childB.setRequirements(reqsB);
+
+        CompositePredicate.Term[] memory terms = new CompositePredicate.Term[](2);
+        terms[0] = _term(address(childA), false);
+        terms[1] = _term(address(childB), false);
+        _setOp(toolId, CompositePredicate.Op.ALL, terms);
+
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 3);
+        assertEq(reqs[0].kind, bytes4(0x11111111));
+        assertEq(keccak256(bytes(reqs[0].label)), keccak256(bytes("req-a")));
+        assertEq(reqs[1].kind, bytes4(0x22222222));
+        assertEq(keccak256(bytes(reqs[1].label)), keccak256(bytes("req-b1")));
+        assertEq(reqs[2].kind, bytes4(0x33333333));
+        assertEq(keccak256(bytes(reqs[2].label)), keccak256(bytes("req-b2")));
+        assertEq(uint256(logic), uint256(RequirementLogic.AND));
+    }
+
+    function test_getRequirements_sentinelMixedWithRealRequirements() public {
+        RevertingPredicate reverter = new RevertingPredicate();
+        MockRequirementsPredicate childB = new MockRequirementsPredicate();
+
+        // Configure childB with 1 requirement.
+        AccessRequirement[] memory reqsB = new AccessRequirement[](1);
+        reqsB[0] = AccessRequirement({kind: bytes4(0x44444444), data: hex"dd", label: "real-req"});
+        childB.setRequirements(reqsB);
+
+        CompositePredicate.Term[] memory terms = new CompositePredicate.Term[](2);
+        terms[0] = _term(address(reverter), false);
+        terms[1] = _term(address(childB), false);
+        _setOp(toolId, CompositePredicate.Op.ANY, terms);
+
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        // Sentinel from reverter + real requirement from childB.
+        assertEq(reqs.length, 2);
+        assertEq(reqs[0].kind, bytes4(0));
+        assertEq(keccak256(bytes(reqs[0].label)), keccak256(bytes("unknown")));
+        assertEq(reqs[1].kind, bytes4(0x44444444));
+        assertEq(keccak256(bytes(reqs[1].label)), keccak256(bytes("real-req")));
+        assertEq(uint256(logic), uint256(RequirementLogic.OR));
     }
 }
 

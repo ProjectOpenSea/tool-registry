@@ -5,7 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {ERC1155OwnerPredicate} from "../examples/ERC1155OwnerPredicate.sol";
-import {IAccessPredicate} from "../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../src/interfaces/IAccessPredicate.sol";
+import {IERC1155Holding} from "../src/interfaces/IRequirementTypes.sol";
 import {ToolRegistry} from "../src/ToolRegistry.sol";
 
 /// @dev Minimal mock ERC-1155 with configurable per-(account, id) balances.
@@ -399,6 +400,58 @@ contract ERC1155OwnerPredicateTest is Test {
     function test_constructor_revertsOnZeroRegistry() public {
         vm.expectRevert("ERC1155OwnerPredicate: zero registry");
         new ERC1155OwnerPredicate(address(0));
+    }
+
+    // ── getRequirements ──────────────────────────────────────────────────
+
+    function test_getRequirements_emptyWhenNoEntries() public view {
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 0);
+        assertEq(uint256(logic), uint256(RequirementLogic.OR));
+    }
+
+    function test_getRequirements_expandsTokenIds() public {
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = 10;
+        ids[1] = 20;
+        ERC1155OwnerPredicate.CollectionTokens[] memory entries = new ERC1155OwnerPredicate.CollectionTokens[](1);
+        entries[0] = ERC1155OwnerPredicate.CollectionTokens({collection: address(nft), tokenIds: ids});
+
+        vm.prank(creator);
+        predicate.setCollectionTokens(toolId, entries);
+
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 2);
+        assertEq(reqs[0].kind, type(IERC1155Holding).interfaceId);
+        (address col0, uint256 id0) = abi.decode(reqs[0].data, (address, uint256));
+        assertEq(col0, address(nft));
+        assertEq(id0, 10);
+        (address col1, uint256 id1) = abi.decode(reqs[1].data, (address, uint256));
+        assertEq(col1, address(nft));
+        assertEq(id1, 20);
+        assertEq(uint256(logic), uint256(RequirementLogic.OR));
+    }
+
+    function test_getRequirements_multipleCollections() public {
+        ERC1155OwnerPredicate.CollectionTokens[] memory entries = new ERC1155OwnerPredicate.CollectionTokens[](2);
+        uint256[] memory ids1 = new uint256[](1);
+        ids1[0] = 1;
+        uint256[] memory ids2 = new uint256[](1);
+        ids2[0] = 42;
+        entries[0] = ERC1155OwnerPredicate.CollectionTokens({collection: address(nft), tokenIds: ids1});
+        entries[1] = ERC1155OwnerPredicate.CollectionTokens({collection: address(nft2), tokenIds: ids2});
+
+        vm.prank(creator);
+        predicate.setCollectionTokens(toolId, entries);
+
+        (AccessRequirement[] memory reqs,) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 2);
+        (address c0, uint256 t0) = abi.decode(reqs[0].data, (address, uint256));
+        assertEq(c0, address(nft));
+        assertEq(t0, 1);
+        (address c1, uint256 t1) = abi.decode(reqs[1].data, (address, uint256));
+        assertEq(c1, address(nft2));
+        assertEq(t1, 42);
     }
 }
 

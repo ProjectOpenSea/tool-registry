@@ -3,7 +3,8 @@ pragma solidity ^0.8.25;
 
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
-import {IAccessPredicate} from "../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../src/interfaces/IAccessPredicate.sol";
+import {IERC1155Holding} from "../src/interfaces/IRequirementTypes.sol";
 import {IToolRegistry} from "../src/interfaces/IToolRegistry.sol";
 
 /// @title ERC1155OwnerPredicate
@@ -114,6 +115,35 @@ contract ERC1155OwnerPredicate is IAccessPredicate, ERC165 {
             }
         }
         return false;
+    }
+
+    /// @inheritdoc IAccessPredicate
+    function getRequirements(uint256 toolId)
+        external
+        view
+        override
+        returns (AccessRequirement[] memory requirements, RequirementLogic logic)
+    {
+        CollectionTokens[] storage entries = _entries[toolId];
+        uint256 entryCount = entries.length;
+        uint256 total;
+        for (uint256 i; i < entryCount; ++i) {
+            total += entries[i].tokenIds.length;
+        }
+        requirements = new AccessRequirement[](total);
+        uint256 idx;
+        for (uint256 i; i < entryCount; ++i) {
+            address collection = entries[i].collection;
+            uint256[] storage ids = entries[i].tokenIds;
+            for (uint256 j; j < ids.length; ++j) {
+                requirements[idx++] = AccessRequirement({
+                    kind: type(IERC1155Holding).interfaceId,
+                    data: abi.encode(collection, ids[j]),
+                    label: ""
+                });
+            }
+        }
+        logic = RequirementLogic.OR;
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {

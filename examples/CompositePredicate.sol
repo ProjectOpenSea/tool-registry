@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {ERC165, IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
-import {IAccessPredicate} from "../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../src/interfaces/IAccessPredicate.sol";
 import {IToolRegistry} from "../src/interfaces/IToolRegistry.sol";
 
 /// @title CompositePredicate
@@ -219,6 +219,61 @@ contract CompositePredicate is IAccessPredicate, ERC165 {
         } catch {
             revert InvalidAccessPredicate(predicate);
         }
+    }
+
+    /// @inheritdoc IAccessPredicate
+    /// @dev Requirements are flattened from all leaf predicates; child predicate
+    /// logic is not preserved. The returned logic is the top-level combinator only.
+    ///
+    /// If a child predicate reverts (or has no code), a sentinel requirement with
+    /// `kind = 0x00000000` and `label = "unknown"` is emitted so callers know
+    /// introspection was incomplete. Agents MUST treat the returned array as
+    /// advisory and fall back to `hasAccess` as the authoritative check.
+    function getRequirements(uint256 toolId)
+        external
+        view
+        override
+        returns (AccessRequirement[] memory requirements, RequirementLogic logic)
+    {
+        Term[] storage terms = _terms[toolId];
+        uint256 len = terms.length;
+        if (len == 0) {
+            return (new AccessRequirement[](0), RequirementLogic.AND);
+        }
+
+        // Collect requirements from each leaf, flattening into one array.
+        // Children that revert or have no code produce a sentinel entry so
+        // callers can detect incomplete introspection.
+        AccessRequirement[][] memory perTerm = new AccessRequirement[][](len);
+        uint256 total;
+        for (uint256 i; i < len; ++i) {
+            address predicate = terms[i].predicate;
+            if (predicate.code.length == 0) {
+                perTerm[i] = new AccessRequirement[](1);
+                perTerm[i][0] = AccessRequirement({kind: bytes4(0), data: "", label: "unknown"});
+                total += 1;
+                continue;
+            }
+            try IAccessPredicate(predicate).getRequirements(toolId) returns (
+                AccessRequirement[] memory reqs, RequirementLogic
+            ) {
+                perTerm[i] = reqs;
+                total += reqs.length;
+            } catch {
+                perTerm[i] = new AccessRequirement[](1);
+                perTerm[i][0] = AccessRequirement({kind: bytes4(0), data: "", label: "unknown"});
+                total += 1;
+            }
+        }
+
+        requirements = new AccessRequirement[](total);
+        uint256 idx;
+        for (uint256 i; i < len; ++i) {
+            for (uint256 j; j < perTerm[i].length; ++j) {
+                requirements[idx++] = perTerm[i][j];
+            }
+        }
+        logic = _ops[toolId] == Op.ALL ? RequirementLogic.AND : RequirementLogic.OR;
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
-import {IAccessPredicate} from "../../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../../src/interfaces/IAccessPredicate.sol";
 
 /// @dev Predicate whose `hasAccess` deliberately burns every unit of gas it
 ///      is forwarded. Used to pin the registry's `_PREDICATE_GAS_LIMIT`:
@@ -23,6 +23,15 @@ contract GasBurnerPredicate is IAccessPredicate, ERC165 {
             }
         }
         return i == 0;
+    }
+
+    function getRequirements(uint256)
+        external
+        pure
+        returns (AccessRequirement[] memory requirements, RequirementLogic logic)
+    {
+        requirements = new AccessRequirement[](0);
+        logic = RequirementLogic.AND;
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {

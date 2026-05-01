@@ -596,8 +596,8 @@ contract ToolRegistryTest is Test {
     }
 
     function test_interfaceId_IAccessPredicate_pinned() public pure {
-        // XOR of the `hasAccess` and `name` selectors.
-        assertEq(type(IAccessPredicate).interfaceId, bytes4(0xa11ea958));
+        // XOR of the `hasAccess`, `name`, and `getRequirements` selectors.
+        assertEq(type(IAccessPredicate).interfaceId, bytes4(0xbdf9dc18));
     }
 
     // --- name + version ---
@@ -635,4 +635,3 @@ contract ToolRegistryTest is Test {
         return string(buf);
     }
 }
-

@@ -3,7 +3,8 @@ pragma solidity ^0.8.25;
 
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import {IAccessPredicate} from "../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../src/interfaces/IAccessPredicate.sol";
+import {IERC721Holding} from "../src/interfaces/IRequirementTypes.sol";
 import {IToolRegistry} from "../src/interfaces/IToolRegistry.sol";
 
 /// @title ERC721OwnerPredicate
@@ -71,6 +72,26 @@ contract ERC721OwnerPredicate is IAccessPredicate, ERC165 {
             }
         }
         return false;
+    }
+
+    /// @inheritdoc IAccessPredicate
+    function getRequirements(uint256 toolId)
+        external
+        view
+        override
+        returns (AccessRequirement[] memory requirements, RequirementLogic logic)
+    {
+        address[] storage collections = _collections[toolId];
+        uint256 len = collections.length;
+        requirements = new AccessRequirement[](len);
+        for (uint256 i; i < len; ++i) {
+            requirements[i] = AccessRequirement({
+                kind: type(IERC721Holding).interfaceId,
+                data: abi.encode(collections[i]),
+                label: ""
+            });
+        }
+        logic = RequirementLogic.OR;
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {

@@ -4,7 +4,8 @@ pragma solidity ^0.8.25;
 import {Test} from "forge-std/Test.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {SubscriptionPredicate} from "../examples/SubscriptionPredicate.sol";
-import {IAccessPredicate} from "../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../src/interfaces/IAccessPredicate.sol";
+import {ISubscription} from "../src/interfaces/IRequirementTypes.sol";
 import {ToolRegistry} from "../src/ToolRegistry.sol";
 
 /// @dev Contract that does NOT implement ISubscriptionNFT.
@@ -372,6 +373,27 @@ contract SubscriptionPredicateTest is Test {
 
     function test_version() public view {
         assertEq(predicate.version(), "0.1");
+    }
+
+    // ── getRequirements ──────────────────────────────────────────────────
+
+    function test_getRequirements_emptyWhenUnconfigured() public view {
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 0);
+        assertEq(uint256(logic), uint256(RequirementLogic.AND));
+    }
+
+    function test_getRequirements_returnsConfiguredRequirement() public {
+        vm.prank(creator);
+        predicate.configureToolGating(toolId, address(nft), 2);
+
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 1);
+        assertEq(reqs[0].kind, type(ISubscription).interfaceId);
+        (address collection, uint8 minTier) = abi.decode(reqs[0].data, (address, uint8));
+        assertEq(collection, address(nft));
+        assertEq(minTier, 2);
+        assertEq(uint256(logic), uint256(RequirementLogic.AND));
     }
 }
 

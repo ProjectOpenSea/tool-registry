@@ -5,7 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {ERC721OwnerPredicate} from "../examples/ERC721OwnerPredicate.sol";
-import {IAccessPredicate} from "../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../src/interfaces/IAccessPredicate.sol";
+import {IERC721Holding} from "../src/interfaces/IRequirementTypes.sol";
 import {ToolRegistry} from "../src/ToolRegistry.sol";
 
 /// @dev Minimal mock ERC-721 with configurable balanceOf.
@@ -322,6 +323,42 @@ contract ERC721OwnerPredicateTest is Test {
     function test_constructor_revertsOnZeroRegistry() public {
         vm.expectRevert("ERC721OwnerPredicate: zero registry");
         new ERC721OwnerPredicate(address(0));
+    }
+
+    // ── getRequirements ──────────────────────────────────────────────────
+
+    function test_getRequirements_emptyWhenNoCollections() public view {
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 0);
+        assertEq(uint256(logic), uint256(RequirementLogic.OR));
+    }
+
+    function test_getRequirements_singleCollection() public {
+        address[] memory cols = new address[](1);
+        cols[0] = address(nft);
+        vm.prank(creator);
+        predicate.setCollections(toolId, cols);
+
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 1);
+        assertEq(reqs[0].kind, type(IERC721Holding).interfaceId);
+        assertEq(abi.decode(reqs[0].data, (address)), address(nft));
+        assertEq(bytes(reqs[0].label).length, 0);
+        assertEq(uint256(logic), uint256(RequirementLogic.OR));
+    }
+
+    function test_getRequirements_multipleCollections() public {
+        address[] memory cols = new address[](2);
+        cols[0] = address(nft);
+        cols[1] = address(nft2);
+        vm.prank(creator);
+        predicate.setCollections(toolId, cols);
+
+        (AccessRequirement[] memory reqs, RequirementLogic logic) = predicate.getRequirements(toolId);
+        assertEq(reqs.length, 2);
+        assertEq(abi.decode(reqs[0].data, (address)), address(nft));
+        assertEq(abi.decode(reqs[1].data, (address)), address(nft2));
+        assertEq(uint256(logic), uint256(RequirementLogic.OR));
     }
 }
 

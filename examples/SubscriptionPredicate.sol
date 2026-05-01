@@ -2,7 +2,8 @@
 pragma solidity ^0.8.25;
 
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
-import {IAccessPredicate} from "../src/interfaces/IAccessPredicate.sol";
+import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../src/interfaces/IAccessPredicate.sol";
+import {ISubscription} from "../src/interfaces/IRequirementTypes.sol";
 import {IToolRegistry, ToolConfig} from "../src/interfaces/IToolRegistry.sol";
 
 /// @notice Minimal interface for ERC-5643 subscription queries.
@@ -132,6 +133,27 @@ contract SubscriptionPredicate is IAccessPredicate, ERC165 {
         tier = nft.tierOf(tokenId);
         expiration = nft.expiresAt(tokenId);
         active = expiration > block.timestamp && (config.minTier == 0 || tier >= config.minTier);
+    }
+
+    /// @inheritdoc IAccessPredicate
+    function getRequirements(uint256 toolId)
+        external
+        view
+        override
+        returns (AccessRequirement[] memory requirements, RequirementLogic logic)
+    {
+        ToolGatingConfig memory config = _toolConfigs[toolId];
+        if (config.collection == address(0)) {
+            requirements = new AccessRequirement[](0);
+        } else {
+            requirements = new AccessRequirement[](1);
+            requirements[0] = AccessRequirement({
+                kind: type(ISubscription).interfaceId,
+                data: abi.encode(config.collection, config.minTier),
+                label: ""
+            });
+        }
+        logic = RequirementLogic.AND;
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {

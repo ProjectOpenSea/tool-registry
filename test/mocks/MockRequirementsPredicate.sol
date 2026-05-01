@@ -4,23 +4,29 @@ pragma solidity ^0.8.24;
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {AccessRequirement, IAccessPredicate, RequirementLogic} from "../../src/interfaces/IAccessPredicate.sol";
 
-contract MockAccessPredicate is IAccessPredicate, ERC165 {
-    mapping(address => bool) private _allowed;
+/// @dev Predicate that returns a configurable set of requirements.
+///      Used in CompositePredicate tests to exercise the requirement
+///      concatenation / copy loop with non-empty child requirements.
+contract MockRequirementsPredicate is IAccessPredicate, ERC165 {
+    AccessRequirement[] private _reqs;
 
-    function setAllowed(address account, bool allowed) external {
-        _allowed[account] = allowed;
+    function setRequirements(AccessRequirement[] calldata reqs) external {
+        delete _reqs;
+        for (uint256 i; i < reqs.length; ++i) {
+            _reqs.push(reqs[i]);
+        }
     }
 
-    function hasAccess(uint256, address account, bytes calldata) external view returns (bool) {
-        return _allowed[account];
+    function hasAccess(uint256, address, bytes calldata) external pure returns (bool) {
+        return true;
     }
 
     function getRequirements(uint256)
         external
-        pure
+        view
         returns (AccessRequirement[] memory requirements, RequirementLogic logic)
     {
-        requirements = new AccessRequirement[](0);
+        requirements = _reqs;
         logic = RequirementLogic.AND;
     }
 
@@ -29,6 +35,6 @@ contract MockAccessPredicate is IAccessPredicate, ERC165 {
     }
 
     function name() external pure returns (string memory) {
-        return "MockAccessPredicate";
+        return "MockRequirementsPredicate";
     }
 }
