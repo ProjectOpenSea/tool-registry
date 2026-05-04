@@ -28,7 +28,7 @@ Formatter: 120 char line width, 4-space tabs, no bracket spacing.
 | `script/Deploy.s.sol` | Deterministic CREATE2 deployment script |
 | `scripts/generate-test-vectors.ts` | TypeScript helper to produce ABI-encoded test inputs (its own pnpm project) |
 | `eip-xxxx-tool-registry.md` | Draft EIP — must mirror current interface IDs and behavior |
-| `lib/` | Foundry dependencies via git submodules (forge-std, OpenZeppelin) |
+| `lib/` | Foundry dependencies via git submodules (forge-std, OpenZeppelin, create2-helpers) |
 
 ## Review Checklist
 
