@@ -22,6 +22,7 @@ interface IToolRegistry {
     );
     event ToolMetadataUpdated(uint256 indexed toolId, string newURI, bytes32 newHash);
     event AccessPredicateUpdated(uint256 indexed toolId, address indexed newPredicate);
+    event ToolDeregistered(uint256 indexed toolId);
 
     error ToolNotFound(uint256 toolId);
     error NotToolCreator(uint256 toolId, address caller);
@@ -36,9 +37,13 @@ interface IToolRegistry {
     ///      treats it as a misconfigured predicate.
     error InvalidAccessPredicate(address predicate);
 
+    /// @notice The tool has been deregistered by its creator.
+    error ToolIsDeregistered(uint256 toolId);
+
     function registerTool(string calldata metadataURI, bytes32 manifestHash, address accessPredicate)
         external
         returns (uint256 toolId);
+    function deregisterTool(uint256 toolId) external;
     function updateToolMetadata(uint256 toolId, string calldata newURI, bytes32 newHash) external;
     function setAccessPredicate(uint256 toolId, address newPredicate) external;
     function getToolConfig(uint256 toolId) external view returns (ToolConfig memory);

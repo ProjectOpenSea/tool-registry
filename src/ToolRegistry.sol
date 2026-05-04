@@ -42,6 +42,7 @@ contract ToolRegistry is IToolRegistry, ERC165 {
     ///      ever writes to `_tools[0]`.
     uint256 private _nextToolId = 1;
     mapping(uint256 => ToolConfig) private _tools;
+    mapping(uint256 => bool) private _deregistered;
 
     function registerTool(string calldata metadataURI, bytes32 manifestHash, address accessPredicate)
         external
@@ -58,6 +59,16 @@ contract ToolRegistry is IToolRegistry, ERC165 {
         });
 
         emit ToolRegistered(toolId, msg.sender, accessPredicate, metadataURI, manifestHash);
+    }
+
+    function deregisterTool(uint256 toolId) external {
+        _requireExists(toolId);
+        _requireCreator(toolId);
+
+        delete _tools[toolId];
+        _deregistered[toolId] = true;
+
+        emit ToolDeregistered(toolId);
     }
 
     function updateToolMetadata(uint256 toolId, string calldata newURI, bytes32 newHash) external {
@@ -165,6 +176,7 @@ contract ToolRegistry is IToolRegistry, ERC165 {
     }
 
     function _requireExists(uint256 toolId) internal view {
+        if (_deregistered[toolId]) revert ToolIsDeregistered(toolId);
         if (_tools[toolId].creator == address(0)) revert ToolNotFound(toolId);
     }
 

@@ -43,6 +43,9 @@ When reviewing changes to this package, verify:
    - Solidity interfaces (`src/interfaces/`) ↔ TypeScript ABIs (`../tool-sdk/src/lib/onchain/abis.ts`)
    - Deployed addresses in `README.md` ↔ `../tool-sdk/src/lib/onchain/chains.ts`
    - Every function in the Solidity interface should have a corresponding entry in the TypeScript ABI
+   - Requirement-type selectors in `src/interfaces/IRequirementTypes.sol` ↔ `kind` values in `../tool-sdk/SKILLS.md` "Known Predicates" section
+   - Deployed predicate addresses in `README.md` ↔ `../tool-sdk/SKILLS.md` "Deployed Contracts" table
+   - New predicates added to `examples/` must get a corresponding entry in `../tool-sdk/SKILLS.md`
 
 3. **Access control on state-mutating functions**: Only the tool creator should be able to call `updateToolMetadata`, `setAccessPredicate`, and predicate configuration functions like `setCollections`. Verify `NotToolCreator` / creator checks exist.
 

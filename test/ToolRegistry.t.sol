@@ -591,8 +591,8 @@ contract ToolRegistryTest is Test {
         // Pins the IToolRegistry ERC-165 interface ID so the interface cannot
         // drift without the accompanying spec update. Derived from the XOR of
         // every selector in IToolRegistry.
-        assertEq(type(IToolRegistry).interfaceId, bytes4(0x609466bf));
-        assertTrue(registry.supportsInterface(0x609466bf));
+        assertEq(type(IToolRegistry).interfaceId, bytes4(0xf1dc8075));
+        assertTrue(registry.supportsInterface(0xf1dc8075));
     }
 
     function test_interfaceId_IAccessPredicate_pinned() public pure {
@@ -625,6 +625,112 @@ contract ToolRegistryTest is Test {
         assertFalse(registry.supportsInterface(0xffffffff));
     }
 
+    // --- deregisterTool ---
+
+    function test_deregisterTool() public {
+        vm.prank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+
+        vm.prank(creator);
+        vm.expectEmit(true, false, false, true);
+        emit IToolRegistry.ToolDeregistered(toolId);
+        registry.deregisterTool(toolId);
+
+        // After deregistration, getToolConfig reverts with ToolIsDeregistered.
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolIsDeregistered.selector, toolId));
+        registry.getToolConfig(toolId);
+    }
+
+    function test_deregisterTool_hasAccessRevertsAfterDeregistration() public {
+        vm.prank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+
+        vm.prank(creator);
+        registry.deregisterTool(toolId);
+
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolIsDeregistered.selector, toolId));
+        registry.hasAccess(toolId, other, "");
+    }
+
+    function test_deregisterTool_tryHasAccessRevertsAfterDeregistration() public {
+        vm.prank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+
+        vm.prank(creator);
+        registry.deregisterTool(toolId);
+
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolIsDeregistered.selector, toolId));
+        registry.tryHasAccess(toolId, other, "");
+    }
+
+    function test_deregisterTool_revertsIfNotCreator() public {
+        vm.prank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+
+        vm.prank(other);
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.NotToolCreator.selector, toolId, other));
+        registry.deregisterTool(toolId);
+    }
+
+    function test_deregisterTool_revertsIfNotFound() public {
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolNotFound.selector, 999));
+        registry.deregisterTool(999);
+    }
+
+    function test_deregisterTool_revertsIfAlreadyDeregistered() public {
+        vm.startPrank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+        registry.deregisterTool(toolId);
+
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolIsDeregistered.selector, toolId));
+        registry.deregisterTool(toolId);
+        vm.stopPrank();
+    }
+
+    function test_deregisterTool_updateMetadataRevertsAfterDeregistration() public {
+        vm.startPrank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+        registry.deregisterTool(toolId);
+
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolIsDeregistered.selector, toolId));
+        registry.updateToolMetadata(toolId, META_URI_2, MANIFEST_HASH_2);
+        vm.stopPrank();
+    }
+
+    function test_deregisterTool_setPredicateRevertsAfterDeregistration() public {
+        vm.startPrank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+        registry.deregisterTool(toolId);
+
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolIsDeregistered.selector, toolId));
+        registry.setAccessPredicate(toolId, address(predicate));
+        vm.stopPrank();
+    }
+
+    function test_deregisterTool_deregisteredToolRevertsBeforeAuthCheck() public {
+        vm.prank(creator);
+        uint256 toolId = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+        vm.prank(creator);
+        registry.deregisterTool(toolId);
+
+        vm.prank(other);
+        vm.expectRevert(abi.encodeWithSelector(IToolRegistry.ToolIsDeregistered.selector, toolId));
+        registry.deregisterTool(toolId);
+    }
+
+    function test_deregisterTool_doesNotAffectToolCount() public {
+        vm.startPrank(creator);
+        registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+        uint256 toolId2 = registry.registerTool(META_URI, MANIFEST_HASH, address(0));
+        assertEq(registry.toolCount(), 2);
+
+        registry.deregisterTool(toolId2);
+        // toolCount still returns the high-water mark (IDs are never reused).
+        assertEq(registry.toolCount(), 2);
+        vm.stopPrank();
+    }
+
     // --- helpers ---
 
     function _makeUri(uint256 len) internal pure returns (string memory) {
@@ -635,3 +741,4 @@ contract ToolRegistryTest is Test {
         return string(buf);
     }
 }
+
