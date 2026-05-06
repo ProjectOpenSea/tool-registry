@@ -1,5 +1,5 @@
 /**
- * Generates the reference test vectors for the ERC-XXXX Tool Registry spec.
+ * Generates the reference test vectors for the ERC-Draft Tool Registry spec.
  *
  * Produces:
  *   - The JCS (RFC 8785) canonical bytes for two reference manifests.
@@ -28,7 +28,7 @@ function kh(b: Uint8Array): string {
 }
 
 const FREE_TOOL: Manifest = {
-  type: "https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1",
+  type: "https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1",
   name: "nft-price-oracle",
   description: "Returns estimated floor price for any NFT collection.",
   endpoint: "https://tools.example.com/nft-price-oracle",
@@ -53,7 +53,7 @@ const FREE_TOOL: Manifest = {
 }
 
 const PAID_TOOL: Manifest = {
-  type: "https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1",
+  type: "https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1",
   name: "premium-analytics",
   description: "Advanced portfolio analytics for NFT holders.",
   endpoint: "https://tools.example.com/premium-analytics",
@@ -126,7 +126,7 @@ function showMatchingToolConfig(args: {
     `- Tool ID (scoped to \`${args.registryChain}\` and \`${args.registryAddr}\`): \`${args.toolId}\``,
   )
   console.log(
-    `- Canonical CAIP-19 tool reference: \`${args.registryChain}/erc-xxxx:${args.registryAddr}/${args.toolId}\``,
+    `- Canonical CAIP-19 tool reference: \`${args.registryChain}/erc-draft:${args.registryAddr}/${args.toolId}\``,
   )
 }
 
@@ -141,7 +141,7 @@ function showNfcNfdDivergence(): void {
   }
 
   const make = (name: string): Manifest => ({
-    type: "https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1",
+    type: "https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1",
     name,
     description: "NFC/NFD divergence sample.",
     endpoint: "https://tools.example.com/cafe",
@@ -174,7 +174,7 @@ function showNfcNfdDivergence(): void {
 
 function showBomDivergence(): void {
   const obj: Manifest = {
-    type: "https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1",
+    type: "https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1",
     name: "bom-sample",
     description: "Byte-order-mark divergence sample.",
     endpoint: "https://tools.example.com/bom",

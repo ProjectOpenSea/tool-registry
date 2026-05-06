@@ -2,7 +2,7 @@
   "name": "tool-registry-scripts",
   "version": "0.0.0",
   "private": true,
-  "description": "Generator for the ERC-XXXX Tool Registry reference test vectors. Self-contained: install and run in place without affecting the parent project.",
+  "description": "Generator for the ERC-Draft Tool Registry reference test vectors. Self-contained: install and run in place without affecting the parent project.",
   "type": "module",
   "scripts": {
     "generate": "tsx generate-test-vectors.ts"

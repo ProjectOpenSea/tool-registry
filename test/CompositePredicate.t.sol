@@ -25,7 +25,7 @@ contract CompositePredicateTest is Test {
     address otherUser = makeAddr("otherUser");
     address stranger = makeAddr("stranger");
 
-    string constant META_URI = "https://api.opensea.io/.well-known/erc-xxxx/tools/composite.json";
+    string constant META_URI = "https://api.opensea.io/.well-known/erc-draft/tools/composite.json";
     bytes32 constant MANIFEST_HASH = keccak256("manifest-v1");
     uint256 toolId;
 
@@ -435,7 +435,7 @@ contract CompositePredicateTest is Test {
         // Register a second tool with no composition set — it defaults to deny.
         vm.prank(creator);
         uint256 toolId2 = registry.registerTool(
-            "https://api.opensea.io/.well-known/erc-xxxx/tools/composite-2.json",
+            "https://api.opensea.io/.well-known/erc-draft/tools/composite-2.json",
             keccak256("manifest-v2"),
             address(predicate)
         );
@@ -588,7 +588,7 @@ contract CompositePredicateIntegrationTest is Test {
     address holder = makeAddr("holder");
     address nonHolder = makeAddr("nonHolder");
 
-    string constant META_URI = "https://api.opensea.io/.well-known/erc-xxxx/tools/composite-int.json";
+    string constant META_URI = "https://api.opensea.io/.well-known/erc-draft/tools/composite-int.json";
     bytes32 constant MANIFEST_HASH = keccak256("manifest-v1");
 
     function setUp() public {

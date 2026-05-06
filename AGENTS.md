@@ -1,6 +1,6 @@
 # tool-registry — Agent Conventions
 
-Foundry/Solidity package implementing the ERC-XXXX Agent Tool Registry standard.
+Foundry/Solidity package implementing the ERC-Draft Agent Tool Registry standard.
 
 ## Quick Reference
 
@@ -27,7 +27,7 @@ Formatter: 120 char line width, 4-space tabs, no bracket spacing.
 | `test/` | Foundry tests; mocks live in `test/mocks/` for edge-case predicate behavior |
 | `script/Deploy.s.sol` | Deterministic CREATE2 deployment script |
 | `scripts/generate-test-vectors.ts` | TypeScript helper to produce ABI-encoded test inputs (its own pnpm project) |
-| `eip-xxxx-tool-registry.md` | Draft EIP — must mirror current interface IDs and behavior |
+| `eip-draft-tool-registry.md` | Draft EIP — must mirror current interface IDs and behavior |
 | `lib/` | Foundry dependencies via git submodules (forge-std, OpenZeppelin, create2-helpers) |
 
 ## Review Checklist
@@ -36,7 +36,7 @@ When reviewing changes to this package, verify:
 
 1. **ERC-165 interface IDs**: Adding or removing a function from `IToolRegistry` or `IAccessPredicate` changes the interface ID (XOR of function selectors). If the interface changed:
    - The pinned interface ID test in `test/ToolRegistry.t.sol` must be updated
-   - The EIP draft (`eip-xxxx-tool-registry.md`) must reflect the new ID
+   - The EIP draft (`eip-draft-tool-registry.md`) must reflect the new ID
    - This is a **breaking change** for third-party implementors — document it in the changeset
 
 2. **Cross-file sync**: These files must stay in sync:

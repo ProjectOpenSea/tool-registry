@@ -1,9 +1,9 @@
 ---
-eip: XXXX
+eip: Draft
 title: Agent Tool Registry
 description: Minimal onchain registry for AI agent tools with extensible predicate-based access control
 author: Cody Sears (@CodySearsOS), Ryan Ghods (@ryanio)
-discussions-to: https://ethereum-magicians.org/t/eip-xxxx-agent-tool-registry/XXXXX
+discussions-to: https://ethereum-magicians.org/t/eip-draft-agent-tool-registry/XXXXX
 status: Draft
 type: Standards Track
 category: ERC
@@ -387,7 +387,7 @@ Third-party predicate authors SHOULD publish a marker interface in `IRequirement
 
 #### Tool ID Scope
 
-Tool IDs are scoped to the `(chainId, registryAddress)` tuple. Two independent deployments of this registry (on the same or different chains) MAY assign the same tool ID to unrelated tools. Offchain consumers (indexers, wallets, agent frameworks) MUST qualify tool references with the deploying chain ID and registry address. The RECOMMENDED canonical identifier format follows CAIP-19: `eip155:<chainId>/erc-xxxx:<registryAddress>/<toolId>`.
+Tool IDs are scoped to the `(chainId, registryAddress)` tuple. Two independent deployments of this registry (on the same or different chains) MAY assign the same tool ID to unrelated tools. Offchain consumers (indexers, wallets, agent frameworks) MUST qualify tool references with the deploying chain ID and registry address. The RECOMMENDED canonical identifier format follows CAIP-19: `eip155:<chainId>/erc-draft:<registryAddress>/<toolId>`.
 
 ### 2. Tool Manifest
 
@@ -416,7 +416,7 @@ Any RFC 8785 conformant implementation MUST produce the same byte output for the
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `type` | string | Schema version identifier (e.g., `"https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1"`) |
+| `type` | string | Schema version identifier (e.g., `"https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1"`) |
 | `name` | string | Tool name. 1-128 Unicode code points in NFC form. MUST NOT contain Unicode control characters (general category `Cc`). |
 | `description` | string | Human-readable description. 1-500 Unicode code points in NFC form. MAY contain LF (`U+000A`), CR (`U+000D`), and TAB (`U+0009`) for Markdown formatting; all other Unicode control characters (general category `Cc`) MUST NOT appear. |
 | `endpoint` | string | URL where the tool is hosted. MUST be normalized per the **general HTTPS-URL normalization** rules in [§4 URL Normalization](#url-normalization) (G1: lowercase scheme and host; G2: elide default port 443; G3: A-label-encoded host) before being stored in the manifest, and MUST begin with `https://` after normalization. Other schemes (`http://`, `data:`, `javascript:`, `file:`, etc.) MUST NOT be used; consumers MUST reject a manifest whose `endpoint` is not `https://` post-normalization. The well-known-path rules (W1‑W3) do **not** apply to `endpoint`: it MAY include a path, query string, or fragment, and only its scheme, host, and port participate in the origin equality check defined in [§4](#4-origin-binding-anti-impersonation). |
@@ -445,7 +445,7 @@ Extension authors MUST namespace their keys. The RECOMMENDED form is a reverse-D
 
 ```json
 {
-  "type": "https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1",
+  "type": "https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1",
   "name": "nft-price-oracle",
   "description": "Returns estimated floor price for any NFT collection.",
   "endpoint": "https://tools.example.com/nft-price-oracle",
@@ -474,7 +474,7 @@ Extension authors MUST namespace their keys. The RECOMMENDED form is a reverse-D
 
 ```json
 {
-  "type": "https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1",
+  "type": "https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1",
   "name": "premium-analytics",
   "description": "Advanced portfolio analytics for NFT holders.",
   "endpoint": "https://tools.example.com/premium-analytics",
@@ -1326,7 +1326,7 @@ Semantic input (identical to the "Free Tool" example in §2):
 
 ```json
 {
-  "type": "https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1",
+  "type": "https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1",
   "name": "nft-price-oracle",
   "description": "Returns estimated floor price for any NFT collection.",
   "endpoint": "https://tools.example.com/nft-price-oracle",
@@ -1351,13 +1351,13 @@ Semantic input (identical to the "Free Tool" example in §2):
 }
 ```
 
-JCS canonical bytes (UTF-8, 632 bytes, whitespace-free on a single line in the wire representation; rendered here without wrapping):
+JCS canonical bytes (UTF-8, 633 bytes, whitespace-free on a single line in the wire representation; rendered here without wrapping):
 
 ```
-{"creatorAddress":"0xabcdefabcdef1234567890abcdefabcdef123456","description":"Returns estimated floor price for any NFT collection.","endpoint":"https://tools.example.com/nft-price-oracle","inputs":{"properties":{"chainId":{"type":"integer"},"collection":{"description":"Contract address","type":"string"}},"required":["collection","chainId"],"type":"object"},"name":"nft-price-oracle","outputs":{"properties":{"floorPriceEth":{"type":"string"},"updatedAt":{"format":"date-time","type":"string"}},"type":"object"},"tags":["nft","pricing","oracle"],"type":"https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1","version":"1.0.0"}
+{"creatorAddress":"0xabcdefabcdef1234567890abcdefabcdef123456","description":"Returns estimated floor price for any NFT collection.","endpoint":"https://tools.example.com/nft-price-oracle","inputs":{"properties":{"chainId":{"type":"integer"},"collection":{"description":"Contract address","type":"string"}},"required":["collection","chainId"],"type":"object"},"name":"nft-price-oracle","outputs":{"properties":{"floorPriceEth":{"type":"string"},"updatedAt":{"format":"date-time","type":"string"}},"type":"object"},"tags":["nft","pricing","oracle"],"type":"https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1","version":"1.0.0"}
 ```
 
-- `manifestHash` = `0x85f160012d9fd30c7e82bc9d3959c90ec9df3c7d69009a343d8ee01904321290`
+- `manifestHash` = `0x142af74ae3e1b7aee9a8249fab3507dada81c925fbfd0a63d0a5a9cac085b392`
 
 Matching `ToolConfig` (registered on `eip155:8453` at registry `0xaaaa…aaaa` as tool ID `1`):
 
@@ -1365,12 +1365,12 @@ Matching `ToolConfig` (registered on `eip155:8453` at registry `0xaaaa…aaaa` a
 ToolConfig {
     creator:         0xabcdefabcdef1234567890abcdefabcdef123456,
     metadataURI:     "https://tools.example.com/.well-known/ai-tool/nft-price-oracle.json",
-    manifestHash:    0x85f160012d9fd30c7e82bc9d3959c90ec9df3c7d69009a343d8ee01904321290,
+    manifestHash:    0x142af74ae3e1b7aee9a8249fab3507dada81c925fbfd0a63d0a5a9cac085b392,
     accessPredicate: 0x0000000000000000000000000000000000000000
 }
 ```
 
-Canonical CAIP-19 tool reference: `eip155:8453/erc-xxxx:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/1`.
+Canonical CAIP-19 tool reference: `eip155:8453/erc-draft:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/1`.
 
 ### Paid-Tool Manifest
 
@@ -1378,7 +1378,7 @@ Semantic input (identical to the "Paid Tool" example in §2):
 
 ```json
 {
-  "type": "https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1",
+  "type": "https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1",
   "name": "premium-analytics",
   "description": "Advanced portfolio analytics for NFT holders.",
   "endpoint": "https://tools.example.com/premium-analytics",
@@ -1416,13 +1416,13 @@ Semantic input (identical to the "Paid Tool" example in §2):
 }
 ```
 
-JCS canonical bytes (UTF-8, 922 bytes):
+JCS canonical bytes (UTF-8, 923 bytes):
 
 ```
-{"creatorAddress":"0xabcdef0123456789abcdef0123456789abcdef01","description":"Advanced portfolio analytics for NFT holders.","endpoint":"https://tools.example.com/premium-analytics","inputs":{"properties":{"wallet":{"description":"Wallet address to analyze","type":"string"}},"required":["wallet"],"type":"object"},"name":"premium-analytics","outputs":{"properties":{"breakdown":{"type":"array"},"totalValue":{"type":"string"}},"type":"object"},"pricing":[{"amount":"20000","asset":"eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913","protocol":"x402","recipient":"eip155:8453:0xabcdef0123456789abcdef0123456789abcdef01"},{"amount":"20000","asset":"eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48","protocol":"x402","recipient":"eip155:1:0xabcdef0123456789abcdef0123456789abcdef01"}],"tags":["analytics","portfolio"],"type":"https://eips.ethereum.org/EIPS/eip-XXXX#tool-manifest-v1","version":"1.0.0"}
+{"creatorAddress":"0xabcdef0123456789abcdef0123456789abcdef01","description":"Advanced portfolio analytics for NFT holders.","endpoint":"https://tools.example.com/premium-analytics","inputs":{"properties":{"wallet":{"description":"Wallet address to analyze","type":"string"}},"required":["wallet"],"type":"object"},"name":"premium-analytics","outputs":{"properties":{"breakdown":{"type":"array"},"totalValue":{"type":"string"}},"type":"object"},"pricing":[{"amount":"20000","asset":"eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913","protocol":"x402","recipient":"eip155:8453:0xabcdef0123456789abcdef0123456789abcdef01"},{"amount":"20000","asset":"eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48","protocol":"x402","recipient":"eip155:1:0xabcdef0123456789abcdef0123456789abcdef01"}],"tags":["analytics","portfolio"],"type":"https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1","version":"1.0.0"}
 ```
 
-- `manifestHash` = `0xf5c2253fa557ef61e7b91fdfb3613c5a14acf6f986193a40aeb0b481dc6cbac3`
+- `manifestHash` = `0x5a0550de1c789afc64bd64128091f584d5a5a9b17788c267a4e974ccbf2c134d`
 
 Matching `ToolConfig` (registered on `eip155:8453` at the same registry `0xaaaa…aaaa` as tool ID `2`, gated by predicate `0xbbbb…bbbb`):
 
@@ -1430,7 +1430,7 @@ Matching `ToolConfig` (registered on `eip155:8453` at the same registry `0xaaaa�
 ToolConfig {
     creator:         0xabcdef0123456789abcdef0123456789abcdef01,
     metadataURI:     "https://tools.example.com/.well-known/ai-tool/premium-analytics.json",
-    manifestHash:    0xf5c2253fa557ef61e7b91fdfb3613c5a14acf6f986193a40aeb0b481dc6cbac3,
+    manifestHash:    0x5a0550de1c789afc64bd64128091f584d5a5a9b17788c267a4e974ccbf2c134d,
     accessPredicate: 0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 }
 ```
