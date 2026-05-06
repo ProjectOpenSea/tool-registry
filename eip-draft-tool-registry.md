@@ -181,6 +181,9 @@ interface IToolRegistry /* is IERC165 */ {
     ///      is `bytes32(0)`, and with `InvalidMetadataURI` if `newURI` is the
     ///      empty string or longer than 2,048 bytes (see
     ///      [Metadata URI Length Cap](#metadata-uri-length-cap)).
+    ///      MUST revert with `ToolNotFound` if `toolId` has not been registered
+    ///      and with `ToolIsDeregistered` if `toolId` was previously
+    ///      deregistered.
     ///      MUST emit `ToolMetadataUpdated` when either `newURI` or `newHash`
     ///      differs from the stored values. Implementations MAY skip emission
     ///      when the call is idempotent (both values match what is already
@@ -202,13 +205,18 @@ interface IToolRegistry /* is IERC165 */ {
     ///      `newPredicate` at an always-deny predicate; this re-uses the
     ///      predicate mechanism already required for any gated tool and is
     ///      reversible (unlike `deregisterTool`).
+    ///      MUST revert with `ToolNotFound` if `toolId` has not been registered
+    ///      and with `ToolIsDeregistered` if `toolId` was previously
+    ///      deregistered.
     ///      Implementations MUST validate `newPredicate` per the rules in
-    ///      [Predicate Validation at Registration](#predicate-validation-at-registration);
-    ///      the same checks apply at update time as at registration time.
-    ///      MUST emit `AccessPredicateUpdated` when the stored predicate
-    ///      changes. Implementations MAY skip emission when the call is
-    ///      idempotent (`newPredicate` equals the currently stored
-    ///      predicate), to avoid polluting event streams.
+    ///      [Predicate Validation at Registration](#predicate-validation-at-registration)
+    ///      whenever the call would change the stored predicate; the same
+    ///      checks apply at update time as at registration time. An idempotent
+    ///      call (`newPredicate` equals the currently stored predicate) is a
+    ///      no-op: implementations MAY skip both validation and emission of
+    ///      `AccessPredicateUpdated`, since no state transition occurs. When
+    ///      the stored predicate changes, implementations MUST emit
+    ///      `AccessPredicateUpdated`.
     /// @param toolId       The tool to update.
     /// @param newPredicate The new access predicate address, or address(0) for open access.
     function setAccessPredicate(uint256 toolId, address newPredicate) external;
@@ -216,7 +224,10 @@ interface IToolRegistry /* is IERC165 */ {
     // ──────────────────── Views ────────────────────
 
     /// @notice Get the full configuration for a tool.
-    /// @dev MUST revert with `ToolNotFound` if `toolId` has not been registered.
+    /// @dev MUST revert with `ToolNotFound` if `toolId` has not been registered
+    ///      and with `ToolIsDeregistered` if `toolId` was previously
+    ///      deregistered. Consumers MUST be able to distinguish "never
+    ///      registered" from "removed by the creator".
     function getToolConfig(uint256 toolId) external view returns (ToolConfig memory);
 
     /// @notice Check whether an account has access to a tool.
@@ -228,9 +239,11 @@ interface IToolRegistry /* is IERC165 */ {
     ///      "denied" from "predicate malfunctioned" MUST use `tryHasAccess`
     ///      instead.
     ///      MUST revert with `ToolNotFound` if `toolId` has not been
-    ///      registered (consistent with `getToolConfig`); a non-existent
-    ///      tool is not the same as an inaccessible one and consumers
-    ///      MUST be able to distinguish the two.
+    ///      registered and with `ToolIsDeregistered` if `toolId` was
+    ///      previously deregistered (consistent with `getToolConfig`); a
+    ///      non-existent tool, a deregistered tool, and an inaccessible tool
+    ///      are three different states and consumers MUST be able to
+    ///      distinguish them.
     ///      Implementations MUST invoke the predicate via `staticcall` and
     ///      MUST apply the strict ABI-bool decode rules described under
     ///      `tryHasAccess` below: the return data MUST be exactly 32 bytes,
@@ -268,10 +281,12 @@ interface IToolRegistry /* is IERC165 */ {
     ///        denial (e.g., "predicate is misconfigured" vs "you do not
     ///        qualify"). Implementations MUST NOT return `(false, true)`.
     ///      MUST revert with `ToolNotFound` if `toolId` has not been
-    ///      registered, identically to `hasAccess` and `getToolConfig`.
-    ///      An unregistered tool MUST NOT be coerced into the
-    ///      `(false, false)` malfunction outcome, since that would conflate
-    ///      "no such tool" with "predicate is broken."
+    ///      registered and with `ToolIsDeregistered` if `toolId` was
+    ///      previously deregistered, identically to `hasAccess` and
+    ///      `getToolConfig`. An unregistered or deregistered tool MUST NOT
+    ///      be coerced into the `(false, false)` malfunction outcome, since
+    ///      that would conflate "no such tool" or "removed by creator" with
+    ///      "predicate is broken."
     ///      Same delegation contract as `hasAccess`: MUST invoke the
     ///      predicate via `staticcall`. If `accessPredicate` is `address(0)`,
     ///      MUST return `(true, true)` without calling anything, ignoring
@@ -397,12 +412,13 @@ The `metadataURI` in `ToolConfig` MUST resolve to a JSON document conforming to 
 
 The `manifestHash` in `ToolConfig` is `keccak256` over the **JSON Canonicalization Scheme (JCS)** form of the manifest, as defined by [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785). JCS normalizes object key order, whitespace, number formatting, and string escaping so that semantically identical manifests produce identical byte sequences. Implementations MUST canonicalize with JCS before hashing, and consumers MUST canonicalize before verifying. Servers MAY serve the manifest in any JSON form; the hash commits to the JCS form regardless of transport representation.
 
-JCS does not normalize Unicode string content or reject byte-order marks, so two extra rules apply to every manifest before JCS is run:
+JCS does not normalize Unicode string content, hex-digit case, or byte-order marks, so three extra rules apply to every manifest before JCS is run:
 
 - **Unicode normalization:** all JSON string values MUST be in Unicode [Normalization Form C (NFC)](https://www.unicode.org/reports/tr15/) per Unicode 16.0 or later. Producers MUST NFC-normalize before JCS serialization; consumers MUST reject a fetched manifest whose strings are not already NFC-normalized (no silent re-normalization, since that would change the bytes that were hashed). This prevents hash divergence between producers that canonicalize with NFC and consumers that do not.
 - **Byte-order mark:** the manifest MUST be served as UTF-8 without a byte-order mark. Consumers MUST reject a fetched response whose bytes begin with `EF BB BF` rather than silently stripping the BOM, because silent stripping would change the bytes fed to `keccak256` and cause a hash mismatch that is difficult to diagnose.
+- **Hex-field casing:** every hex string in the manifest (`creatorAddress`, the `0x…` portion of any CAIP-19 `asset` or CAIP-10 `recipient`, `access[].requirements[].kind`, `access[].requirements[].data`, `verifiability.attestation.enclaveHash`, `verifiability.reproducibleBuild.buildHash`, and any future hex-string field added by this ERC) MUST use lowercase hex digits. JCS does not case-fold hex, so two manifests that differ only in hex case produce different `manifestHash` values. Producers MUST emit lowercase hex; consumers MUST reject manifests containing uppercase hex digits in any of the listed fields rather than silently lowercasing them, since silent lowercasing would change the bytes fed to `keccak256` and defeat the hash commitment. See [Manifest Hex-Field Casing](#manifest-hex-field-casing) below for the per-field grammar.
 
-Both rules are treated as verification failures (see [§5 Handling Verification Failure](#handling-verification-failure)). Concrete hash-divergence vectors for NFC-vs-NFD and with-vs-without-BOM appear in [Appendix A: Reference Test Vectors](#appendix-a-reference-test-vectors) alongside canonical reference manifests.
+All three rules are treated as verification failures (see [§7 Handling Verification Failure](#handling-verification-failure)). Concrete hash-divergence vectors for NFC-vs-NFD and with-vs-without-BOM appear in [Appendix A: Reference Test Vectors](#appendix-a-reference-test-vectors) alongside canonical reference manifests.
 
 Reference implementations of JCS suitable for use with this ERC:
 
@@ -412,6 +428,20 @@ Reference implementations of JCS suitable for use with this ERC:
 
 Any RFC 8785 conformant implementation MUST produce the same byte output for the same semantic input; consumers and producers SHOULD use maintained libraries rather than hand-rolled canonicalizers to avoid hash divergence.
 
+#### Manifest Hex-Field Casing
+
+The Canonical Manifest Bytes rule above requires lowercase hex digits in every hex string the manifest carries. The table below pins the whole-value grammar for fields whose value is *exactly* a hex string; consumers MUST reject manifests whose value fails to match before fetching or invoking the tool.
+
+| Field | Whole-value grammar | Notes |
+| --- | --- | --- |
+| `creatorAddress` | `^0x[0-9a-f]{40}$` | 20-byte EVM address. |
+| `access[].requirements[].kind` | `^0x[0-9a-f]{8}$` | 4-byte selector. |
+| `access[].requirements[].data` | `^0x([0-9a-f]{2})*$` | Even-length, lowercase. Empty (`0x`) is valid for kinds with no payload. |
+| `attestation.enclaveHash` | `^0x([0-9a-f]{2})+$` | Even-length, lowercase, non-empty. |
+| `reproducibleBuild.buildHash` | `^0x([0-9a-f]{2})+$` | Even-length, lowercase, non-empty. |
+
+The CAIP-10 / CAIP-19 fields `pricing[].asset` and `pricing[].recipient` carry hex within a longer namespace string (e.g., `eip155:8453/erc20:0x833589…`), so a single anchored regex on the whole field value is not the right shape. Instead: any `0x`-prefixed hex run that appears anywhere within an `asset` or `recipient` value MUST use lowercase hex digits. This duplicates the existing eip155-scoped MUST in [§3 Pricing](#3-pricing) and generalizes it to every CAIP namespace whose addresses are hex-encoded; consumers MUST reject manifests with uppercase hex inside these fields.
+
 #### Required Fields
 
 | Field | Type | Description |
@@ -419,10 +449,10 @@ Any RFC 8785 conformant implementation MUST produce the same byte output for the
 | `type` | string | Schema version identifier (e.g., `"https://eips.ethereum.org/EIPS/eip-draft#tool-manifest-v1"`) |
 | `name` | string | Tool name. 1-128 Unicode code points in NFC form. MUST NOT contain Unicode control characters (general category `Cc`). |
 | `description` | string | Human-readable description. 1-500 Unicode code points in NFC form. MAY contain LF (`U+000A`), CR (`U+000D`), and TAB (`U+0009`) for Markdown formatting; all other Unicode control characters (general category `Cc`) MUST NOT appear. |
-| `endpoint` | string | URL where the tool is hosted. MUST be normalized per the **general HTTPS-URL normalization** rules in [§4 URL Normalization](#url-normalization) (G1: lowercase scheme and host; G2: elide default port 443; G3: A-label-encoded host) before being stored in the manifest, and MUST begin with `https://` after normalization. Other schemes (`http://`, `data:`, `javascript:`, `file:`, etc.) MUST NOT be used; consumers MUST reject a manifest whose `endpoint` is not `https://` post-normalization. The well-known-path rules (W1‑W3) do **not** apply to `endpoint`: it MAY include a path, query string, or fragment, and only its scheme, host, and port participate in the origin equality check defined in [§4](#4-origin-binding-anti-impersonation). |
+| `endpoint` | string | URL where the tool is hosted. MUST be normalized per the **general HTTPS-URL normalization** rules in [§6 URL Normalization](#url-normalization) (G1: lowercase scheme and host; G2: elide default port 443; G3: A-label-encoded host) before being stored in the manifest, and MUST begin with `https://` after normalization. Other schemes (`http://`, `data:`, `javascript:`, `file:`, etc.) MUST NOT be used; consumers MUST reject a manifest whose `endpoint` is not `https://` post-normalization. The well-known-path rules (W1‑W3) do **not** apply to `endpoint`: it MAY include a path, query string, or fragment, and only its scheme, host, and port participate in the origin equality check defined in [§6](#6-origin-binding-anti-impersonation). |
 | `inputs` | object | JSON Schema defining input parameters. `{}` is valid and means "no schema"; the empty object counts as 1 node against the `inputs` + `outputs` 1,024-node cap (see [Manifest Parser Hardening](#manifest-parser-hardening)). |
 | `outputs` | object | JSON Schema defining output parameters. `{}` is valid and means "no schema"; counted the same way as `inputs`. |
-| `creatorAddress` | string | The onchain address permitted to register this tool. MUST be a 42-character `0x`-prefixed lowercase hex string (20 bytes). The manifest's `creatorAddress` field MUST equal the `creator` address recorded onchain (i.e., `msg.sender` of `registerTool`). This allows offchain consumers to verify manifest authenticity by comparing the served manifest's `creatorAddress` with `getToolConfig(toolId).creator`. See [§5 Creator Binding](#5-creator-binding-anti-impersonation) for the grammar rationale and consumer comparison rules. |
+| `creatorAddress` | string | The onchain address permitted to register this tool. MUST match `^0x[0-9a-f]{40}$` (lowercase, for JCS-byte determinism — see [Manifest Hex-Field Casing](#manifest-hex-field-casing)). The manifest's `creatorAddress` field MUST equal the `creator` address recorded onchain (i.e., `msg.sender` of `registerTool`). This allows offchain consumers to verify manifest authenticity by comparing the served manifest's `creatorAddress` with `getToolConfig(toolId).creator`. See [§7 Creator Binding](#7-creator-binding-anti-impersonation) for the grammar rationale and consumer comparison rules. |
 
 #### Optional Fields
 
@@ -432,8 +462,8 @@ Any RFC 8785 conformant implementation MUST produce the same byte output for the
 | `image` | string | Tool icon URL. MUST be at most 2,048 bytes (UTF-8 byte length) after URL normalization, matching the `metadataURI` cap so both URL fields are bounded by the same unit. Consumers are responsible for rendering this field safely; see [Rendering Manifest Content](#rendering-manifest-content). |
 | `tags` | array | Discovery tags. Each tag MUST match `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$` and be 1-32 Unicode code points; the array MUST contain at most 16 entries and MUST NOT contain duplicates (consumers MUST reject manifests with repeated tags). |
 | `pricing` | array | Payment options for tool invocation (see [Pricing](#3-pricing)) |
-| `access` | object | Preflight access-requirement hints for agents (see [Access](#access)) |
-| `verifiability` | object | Execution-environment and data-handling guarantees (see [Verifiability](#verifiability)) |
+| `access` | object | Preflight access-requirement hints for agents (see [Access](#4-access)) |
+| `verifiability` | object | Execution-environment and data-handling guarantees (see [Verifiability](#5-verifiability)) |
 
 #### Unknown Fields and Extensions
 
@@ -587,23 +617,23 @@ The pricing schema is deliberately protocol-agnostic. Each entry identifies a pa
 }
 ```
 
-### Access
+### 4. Access
 
 The optional `access` object advertises the predicate's access requirements in the manifest for cheap preflight discovery, complementary to `IAccessPredicate.getRequirements` (the onchain source of truth). Including `access` in the manifest lets agents plan requirement acquisition before making any onchain calls.
 
 | Field | Type | Description |
 | --- | --- | --- |
 | `logic` | string | `"AND"` (all requirements must be met) or `"OR"` (any one suffices). |
-| `requirements` | array | Non-empty array of requirement objects. |
+| `requirements` | array | Array of requirement objects. MUST be non-empty when the `access` block is present; consumers MUST reject manifests whose `access.requirements` is `[]` or `null`, and MUST reject `access` blocks that omit the `requirements` field entirely. The array is also subject to the length cap in [Manifest Parser Hardening](#manifest-parser-hardening). |
 
 Each requirement object:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `kind` | string | 4-byte hex selector (e.g., `"0xabcd1234"`). MUST match `^0x[0-9a-fA-F]{8}$`. Corresponds to `AccessRequirement.kind` onchain. |
-| `data` | string | Hex-encoded ABI payload. MUST match `^0x[0-9a-fA-F]*$`. Layout is determined by `kind`. |
-| `label` | string | Human-readable hint (e.g., `"Hold any Chonk on Base"`). At most 256 characters. |
-| `links` | object | *(Optional)* String-to-string map of related URLs (e.g., `{"buy": "https://opensea.io/collection/chonks", "predicate": "0x4eC929d...7b88"}`). |
+| `kind` | string | 4-byte hex selector (e.g., `"0xabcd1234"`). MUST match `^0x[0-9a-f]{8}$` (lowercase hex digits, for JCS-canonical-byte determinism — see [Manifest Hex-Field Casing](#manifest-hex-field-casing)). Corresponds to `AccessRequirement.kind` onchain. |
+| `data` | string | Hex-encoded ABI payload. MUST match `^0x([0-9a-f]{2})*$` (lowercase, even number of hex digits). Layout is determined by `kind`. Subject to the per-entry byte cap in [Manifest Parser Hardening](#manifest-parser-hardening). |
+| `label` | string | Human-readable hint (e.g., `"Hold any Chonk on Base"`). MUST be at most 256 bytes (UTF-8 byte length, matching the onchain `label` cap in [Predicate Introspection Hardening](#predicate-introspection-hardening) so that the same string survives both decode paths). |
+| `links` | object | *(Optional)* String-to-string map of related URLs. Each value MUST be an `https://…` URL at most 2,048 bytes long (UTF-8 byte length, matching the `image` and `metadataURI` caps); other schemes (`http:`, `data:`, `javascript:`, `file:`, raw onchain identifiers, etc.) MUST NOT be used. Consumers MUST reject manifests whose `links` map contains any non-HTTPS value or any value longer than the cap. Map keys are short opaque labels chosen by the manifest author (e.g., `buy`, `docs`, `predicate-source`); the same length cap applies to keys. |
 
 Because the `access` block is part of the manifest, it is committed onchain via `manifestHash`. Changing access requirements in the manifest requires calling `updateToolMetadata` with the new hash.
 
@@ -621,7 +651,8 @@ Agents MUST treat the manifest `access` block as an advisory hint. The onchain p
         "data": "0x000000000000000000000000abcdefabcdef1234567890abcdefabcdef123456",
         "label": "Hold any Chonk on Base",
         "links": {
-          "buy": "https://opensea.io/collection/chonks"
+          "buy": "https://opensea.io/collection/chonks",
+          "predicate-source": "https://github.com/example/chonks-predicate"
         }
       }
     ]
@@ -629,7 +660,7 @@ Agents MUST treat the manifest `access` block as an advisory hint. The onchain p
 }
 ```
 
-### Verifiability
+### 5. Verifiability
 
 The optional `verifiability` object declares the tool's execution-environment guarantees and data-handling policies. It is a discovery mechanism: agents use it to make trust decisions before invocation. Like `pricing` and `access`, verifiability claims live in the manifest and are committed onchain via `manifestHash`; they are not stored in the onchain `ToolConfig` struct.
 
@@ -657,7 +688,13 @@ The `tier` field provides a single-dimension summary for agent filtering. The st
 | `"hardware-attested"` | The tool runs in a TEE and provides a remote attestation endpoint. Claims are cryptographically verifiable against the hardware platform's root of trust, but the source may not be available for independent audit. |
 | `"verifiable"` | The tool runs in a TEE, provides remote attestation, AND publishes reproducible build metadata so that anyone can independently rebuild the enclave binary and compare the measurement against the attested hash. This is the strongest tier: the full chain from source → binary → enclave measurement → attestation report is independently verifiable. |
 
-The `tier` is a self-attested claim like all other verifiability fields. Agents MUST NOT grant elevated trust based on `tier` alone; they MUST verify the claim by checking that the structured fields support the declared tier (e.g., a `"verifiable"` tool without `attestation` and `reproducibleBuild` is inconsistent). Indexers and discovery layers SHOULD flag inconsistent manifests.
+The `tier` is a self-attested claim like all other verifiability fields. Agents MUST NOT grant elevated trust based on `tier` alone; they MUST verify the claim by checking that the structured fields support the declared tier. A manifest is inconsistent if any of the following hold:
+
+- `tier` is `"verifiable"` but `attestation` or `reproducibleBuild` is absent.
+- `tier` is `"hardware-attested"` but `execution` is `"standard"` (a non-isolated runtime cannot produce hardware attestation), or `attestation` is absent.
+- `tier` is `"self-attested"` but `execution` is `"tee"` or `"e2ee"` (the tier denies hardware isolation that the execution category claims), or `attestation` is present.
+
+Indexers and discovery layers SHOULD flag inconsistent manifests and SHOULD treat the lower of the declared `tier` and the tier supported by the structured fields as the effective tier for trust decisions.
 
 #### Execution Tiers
 
@@ -708,7 +745,7 @@ The optional `attestation` sub-object provides machine-verifiable proof metadata
 | --- | --- | --- | --- |
 | `type` | string | Yes | Attestation protocol identifier (e.g., `"dcap-v3"`, `"nitro"`, `"sev-snp"`, `"tdx"`). Opaque to this specification; the ERC does not define protocol-specific semantics. |
 | `endpoint` | string | No | HTTPS URL where a fresh remote attestation report can be fetched on demand. MUST begin with `https://` after URL normalization. Attestation endpoints MUST return fresh reports (not cached) so agents can verify liveness. |
-| `enclaveHash` | string | No | Hex-encoded enclave measurement (e.g., SGX MRENCLAVE, Nitro PCR0). MUST match `^0x[0-9a-fA-F]+$`. Consumers MAY use this to pin a specific enclave build and compare against the measurement in the attestation report. |
+| `enclaveHash` | string | No | Hex-encoded enclave measurement (e.g., SGX MRENCLAVE, Nitro PCR0). MUST match `^0x([0-9a-f]{2})+$` (lowercase, even number of hex digits, for JCS-canonical-byte determinism — see [Manifest Hex-Field Casing](#manifest-hex-field-casing)). Consumers MAY use this to pin a specific enclave build and compare against the measurement in the attestation report. |
 | `maxAge` | integer | No | Maximum acceptable age of an attestation report in seconds. Agents SHOULD reject attestation reports older than this value. When absent, agents SHOULD apply a reasonable default (e.g., 3600 seconds). This field addresses attestation staleness: when a platform vendor (Intel, AMD, AWS) revokes a TCB version, stale reports from before the revocation are no longer trustworthy. |
 | `transparencyLogURI` | string | No | URL pointing to a transparency log entry for the attestation (e.g., a [Sigstore Rekor](https://docs.sigstore.dev/logging/overview/) entry). MUST begin with `https://`. Transparency logs provide public, append-only, cryptographically verifiable records that prevent the operator from showing different attestation reports to different agents. Consumers SHOULD prefer tools with transparency log entries over those without. |
 
@@ -722,7 +759,7 @@ The optional `reproducibleBuild` sub-object provides metadata for independently 
 | --- | --- | --- | --- |
 | `sourceCodeURI` | string | Yes | URL pointing to the exact source used to build the enclave binary (e.g., a Git commit URL like `https://github.com/org/repo/tree/<commit>`). MUST begin with `https://`. |
 | `buildInstructions` | string | No | Build command or reference to a reproducible build configuration (e.g., `"nix build .#enclave"`, `"docker build --platform linux/amd64 -f Dockerfile.enclave ."`). When present, consumers can execute this to reproduce the enclave binary and compare the resulting measurement against `attestation.enclaveHash`. |
-| `buildHash` | string | No | Hex-encoded hash of the expected build output. MUST match `^0x[0-9a-fA-F]+$`. When both `buildHash` and `attestation.enclaveHash` are present, consumers can verify that `buildHash` matches the locally-reproduced build and that `enclaveHash` matches the attestation report, closing the full source → binary → enclave → attestation chain. |
+| `buildHash` | string | No | Hex-encoded hash of the expected build output. MUST match `^0x([0-9a-f]{2})+$` (lowercase, even number of hex digits, for JCS-canonical-byte determinism — see [Manifest Hex-Field Casing](#manifest-hex-field-casing)). When both `buildHash` and `attestation.enclaveHash` are present, consumers can verify that `buildHash` matches the locally-reproduced build and that `enclaveHash` matches the attestation report, closing the full source → binary → enclave → attestation chain. |
 
 #### Example: Self-Attested Standard Tool
 
@@ -782,7 +819,7 @@ The optional `reproducibleBuild` sub-object provides metadata for independently 
 }
 ```
 
-### 4. Origin-Binding (Anti-Impersonation)
+### 6. Origin-Binding (Anti-Impersonation)
 
 The manifest MUST be fetchable at a slugged well-known path on the same origin as `endpoint`:
 
@@ -812,7 +849,7 @@ Because URLs have multiple equivalent representations, both registrants and cons
 - **W2.** Apply no query string and no fragment. Consumers MUST reject a `metadataURI` containing `?` or `#`.
 - **W3.** Leave percent-encoding as-is in the slug path segment. The slug grammar (`[a-z0-9]([a-z0-9-]*[a-z0-9])?`) does not use characters that require percent-encoding, so a compliant slug has exactly one encoded form.
 
-Only the `https` scheme is permitted. Consumers MUST reject any `metadataURI` that does not begin with `https://` after normalization. After normalizing both sides, string equality (byte-for-byte) is the comparison rule for check 1 of §5 Consumer Verification.
+Only the `https` scheme is permitted. Consumers MUST reject any `metadataURI` that does not begin with `https://` after normalization. After normalizing both sides, string equality (byte-for-byte) is the comparison rule for check 1 of §7 Consumer Verification.
 
 The `endpoint` field MAY include a path or query string, and MAY include a fragment (fragments are client-side only and do not affect the origin equality check). Only G1‑G3 apply to `endpoint`; W1‑W3 do not.
 
@@ -844,9 +881,9 @@ metadataURI  = https://opensea.io/.well-known/ai-tool/mint.json
 
 All three share the `https://opensea.io` origin, so each slug MUST be unique under that origin.
 
-### 5. Creator Binding (Anti-Impersonation)
+### 7. Creator Binding (Anti-Impersonation)
 
-Origin-binding (§4) proves a manifest was served by the endpoint's operator. It does not prove which onchain account is entitled to register that manifest. Because `registerTool` is permissionless, any account can call it with any `metadataURI` and any `accessPredicate`. Without an additional check, an attacker can read a legitimate creator's well-known URL and register it under the attacker's own address with a malicious predicate: the manifest bytes and `manifestHash` would still verify, but the onchain entry would gate access through the attacker's contract.
+Origin-binding (§6) proves a manifest was served by the endpoint's operator. It does not prove which onchain account is entitled to register that manifest. Because `registerTool` is permissionless, any account can call it with any `metadataURI` and any `accessPredicate`. Without an additional check, an attacker can read a legitimate creator's well-known URL and register it under the attacker's own address with a malicious predicate: the manifest bytes and `manifestHash` would still verify, but the onchain entry would gate access through the attacker's contract.
 
 Creator binding closes this gap by having the manifest itself declare which onchain address is permitted to appear as `creator`.
 
@@ -858,7 +895,7 @@ Creator binding closes this gap by having the manifest itself declare which onch
 }
 ```
 
-The `creatorAddress` field MUST be a 0x-prefixed 20-byte hex string and MUST NOT be the zero address (`0x0000…0000`). Because no EVM caller can have `msg.sender == 0x0`, a manifest declaring the zero address as its `creatorAddress` is unmatchable by any registration and consumers MUST reject it as a verification failure rather than treat it as "no creator constraint." Manifest producers MUST write the hex digits in lowercase (non-checksummed) so that JCS-canonicalized manifests produce deterministic bytes for the same address; consumers MUST compare `creatorAddress` against the onchain `creator` case-insensitively so that a manifest produced by a non-conformant tool that emitted checksummed hex can still be matched. A manifest served with checksummed or mixed-case hex is non-conformant: it will produce a different `manifestHash` than the all-lowercase canonical form, so the hash check in §5 Consumer Verification will fail even when the creator comparison would succeed.
+The `creatorAddress` field MUST be a 0x-prefixed 20-byte hex string with all hex digits in lowercase (see [Manifest Hex-Field Casing](#manifest-hex-field-casing)) and MUST NOT be the zero address (`0x0000…0000`). Because no EVM caller can have `msg.sender == 0x0`, a manifest declaring the zero address as its `creatorAddress` is unmatchable by any registration and consumers MUST reject it as a verification failure rather than treat it as "no creator constraint." A manifest served with checksummed or mixed-case hex fails the hex-casing rule and is rejected at schema validation before any comparison runs; this is also reflected in the hash check, which would mismatch because JCS does not case-fold hex. Consumers comparing the manifest's `creatorAddress` to the onchain `creator` therefore compare two values that are both already lowercased: the manifest field by the schema rule above, and the onchain `creator` by Solidity's address-to-string convention.
 
 Richer creator metadata (ENS names, contact info, reputation signals) is out of scope for this ERC and MAY be placed under a namespaced extension key (see [Unknown Fields and Extensions](#unknown-fields-and-extensions)). Consumers that resolve ENS names MAY use such extensions for display but MUST NOT rely on them for the creator-binding check.
 
@@ -871,9 +908,9 @@ SDKs implementing this specification SHOULD validate at registration time that t
 When resolving a tool, consumers MUST perform the following checks in order, and MUST reject the tool if any check fails:
 
 1. Fetch the manifest from the onchain `metadataURI`.
-2. Confirm that `metadataURI` lies on the endpoint's origin at the well-known path defined in §4. This includes URL normalization (§4), slug grammar (§4), and origin equality (§4); any failure of these sub-checks is a check-2 failure.
-3. Confirm the fetched bytes are valid UTF-8 without a byte-order mark and that every JSON string value is in Unicode NFC form (see [Canonical Manifest Bytes](#canonical-manifest-bytes)). Canonicalize the manifest with JCS (RFC 8785) and verify that its `keccak256` equals the onchain `manifestHash`.
-4. Verify that `manifest.creatorAddress`, lowercased, equals the onchain `creator`, lowercased.
+2. Confirm that `metadataURI` lies on the endpoint's origin at the well-known path defined in §6. This includes URL normalization (§6), slug grammar (§6), and origin equality (§6); any failure of these sub-checks is a check-2 failure.
+3. Confirm the fetched bytes satisfy the pre-JCS rules from [Canonical Manifest Bytes](#canonical-manifest-bytes): UTF-8 without a byte-order mark, every JSON string value in Unicode NFC form, and every manifest hex-string field in lowercase per [Manifest Hex-Field Casing](#manifest-hex-field-casing). Canonicalize the manifest with JCS (RFC 8785) and verify that its `keccak256` equals the onchain `manifestHash`.
+4. Verify that `manifest.creatorAddress` equals the onchain `creator` by byte-equal comparison. Both sides are lowercase (the manifest by the [Manifest Hex-Field Casing](#manifest-hex-field-casing) rule, the onchain `creator` by the standard 20-byte-address-to-`0x`-hex serialization), so case folding is unnecessary; consumers MAY still defensively lowercase before comparing.
 
 A tool passing all four checks is canonically registered: the manifest came from the endpoint's origin, its bytes match the onchain commitment, and the onchain registrant is the party the origin operator nominated. A tool failing check 4 indicates that some account other than the address declared in the manifest has registered this URL; consumers MUST NOT treat such entries as legitimate registrations of the tool.
 
@@ -881,12 +918,12 @@ The following pseudocode specifies check 2 precisely. Given an onchain `metadata
 
 ```
 function verifyOriginBinding(metadataURI, endpoint):
-    // Normalize both URIs per §4 URL Normalization. In particular:
-    // scheme and host are lowercased (§4 rule G1); the default HTTPS
-    // port 443 is elided rather than materialized (§4 rule G2); the
-    // host is the A-label (ACE-encoded) form (§4 rule G3); no trailing
-    // slash is appended (§4 rule W1, metadataURI only); no query or
-    // fragment is permitted on `metadataURI` (§4 rule W2). The endpoint
+    // Normalize both URIs per §6 URL Normalization. In particular:
+    // scheme and host are lowercased (§6 rule G1); the default HTTPS
+    // port 443 is elided rather than materialized (§6 rule G2); the
+    // host is the A-label (ACE-encoded) form (§6 rule G3); no trailing
+    // slash is appended (§6 rule W1, metadataURI only); no query or
+    // fragment is permitted on `metadataURI` (§6 rule W2). The endpoint
     // is normalized under G1‑G3 only and MAY carry a path, query, or
     // fragment.
     metadataURI = normalize(metadataURI)
@@ -895,7 +932,7 @@ function verifyOriginBinding(metadataURI, endpoint):
     // §2 requires endpoint to be https:// after normalization.
     require endpoint.scheme == "https"
 
-    // §4 requires metadataURI to be https:// with the well-known path.
+    // §6 requires metadataURI to be https:// with the well-known path.
     require metadataURI.scheme == "https"
     require metadataURI.query  == ""        // no "?"
     require metadataURI.fragment == ""      // no "#"
@@ -909,7 +946,7 @@ function verifyOriginBinding(metadataURI, endpoint):
     require metadataURI.port   == endpoint.port
 
     // Path must be /.well-known/ai-tool/<slug>.json and the slug must
-    // match the grammar in §4.
+    // match the grammar in §6.
     require metadataURI.path starts with "/.well-known/ai-tool/"
     require metadataURI.path ends with ".json"
     slug = path segment between "/.well-known/ai-tool/" and ".json"
@@ -921,9 +958,9 @@ If any `require` fails, check 2 fails and the tool MUST be treated as unverified
 
 #### Handling Verification Failure
 
-A consumer that cannot complete all four checks (network error, 4xx/5xx, 3xx redirect, TLS error, truncated response, timeout, BOM-prefixed response, non-NFC Unicode, JCS/hash mismatch, creator mismatch, URL-normalization failure such as a query string or fragment on `metadataURI`, non-ACE IDN host, or non-`https` scheme, slug-grammar violation, origin mismatch between `metadataURI` and `endpoint`) MUST treat the tool as unverified. An unverified tool MUST NOT be invoked on behalf of a user and MUST NOT be presented to an agent as a discovered tool. In particular:
+A consumer that cannot complete all four checks (network error, 4xx/5xx, 3xx redirect, TLS error, truncated response, timeout, BOM-prefixed response, non-NFC Unicode, uppercase hex digits in a manifest hex-string field, JCS/hash mismatch, creator mismatch, URL-normalization failure such as a query string or fragment on `metadataURI`, non-ACE IDN host, or non-`https` scheme, slug-grammar violation, origin mismatch between `metadataURI` and `endpoint`) MUST treat the tool as unverified. An unverified tool MUST NOT be invoked on behalf of a user and MUST NOT be presented to an agent as a discovered tool. In particular:
 
-- Consumers MUST NOT follow HTTP redirects when fetching `metadataURI`. A 3xx response MUST be treated as a verification failure. This rule applies to HTTPS→HTTPS redirects as well: the onchain `metadataURI` is already required to be `https://` (see §4), so the only redirects a consumer would observe are same-scheme redirects that silently rewrite the path or origin and defeat the hash commitment. Operators that need to move a manifest update the onchain `metadataURI` via `updateToolMetadata`.
+- Consumers MUST NOT follow HTTP redirects when fetching `metadataURI`. A 3xx response MUST be treated as a verification failure. This rule applies to HTTPS→HTTPS redirects as well: the onchain `metadataURI` is already required to be `https://` (see §6), so the only redirects a consumer would observe are same-scheme redirects that silently rewrite the path or origin and defeat the hash commitment. Operators that need to move a manifest update the onchain `metadataURI` via `updateToolMetadata`.
 - Consumers MUST NOT fall back to "open access" when fetch fails.
 - Consumers MUST NOT fall back to a previously-verified manifest beyond a freshness window of their choosing. Consumers SHOULD define an explicit window appropriate to the surface they power: latency-sensitive interactive UIs can tolerate minutes (RECOMMENDED default: no more than 5 minutes); high-value invocation paths (payments, signing flows) SHOULD re-verify on every use. For any consumer that may cause a tool to be invoked on a user's behalf (agent frameworks, wallets, invocation proxies, or any surface exposing a "run this tool" affordance), a freshness window MUST NOT exceed 24 hours; a cache older than that MUST be treated as expired and re-verified before use. The 24-hour ceiling bounds the stale-manifest exploitation window if an endpoint is compromised. Purely informational surfaces that never surface an invocation affordance (e.g., indexer digests, historical registries) MAY use longer windows, but MUST re-verify before transitioning a cached entry to any surface that could lead to invocation.
 - Consumers MAY surface the failure to the user with the specific failing step, but MUST NOT auto-retry against a relaxed ruleset.
@@ -933,11 +970,11 @@ Indexers SHOULD expose a per-tool `verified` flag derived from all four checks, 
 
 The registry contract cannot enforce check 4 because it has no access to HTTP resources. Enforcement lives in consumers (indexers, agent frameworks, wallets). A naive consumer that skips the check is vulnerable, so consumers SHOULD surface the mismatch explicitly rather than silently accepting such registrations.
 
-### 6. Manifest Hash Commitment
+### 8. Manifest Hash Commitment
 
 The `manifestHash` field in `ToolConfig` commits the canonicalized manifest bytes (see [Canonical Manifest Bytes](#canonical-manifest-bytes)) onchain at registration time. Even though `metadataURI` is a mutable pointer, the hash provides an immutable snapshot. Any change forces an `updateToolMetadata` transaction and emits `ToolMetadataUpdated` with the new URI and hash. Consumers that pin a specific `manifestHash` are unaffected by future updates until they explicitly re-approve. Indexers can track manifest evolution via the emitted events without polling.
 
-### 7. ERC-165 Support
+### 9. ERC-165 Support
 
 Implementations MUST support [ERC-165](https://eips.ethereum.org/EIPS/eip-165). When queried via `supportsInterface(bytes4)`, the contract MUST return `true` for the `IToolRegistry` interface ID. The interface ID is computed as the XOR of all function selectors defined in the `IToolRegistry` interface above.
 
@@ -1010,7 +1047,7 @@ Origin-binding ties a manifest's provenance to DNS/TLS ownership of its endpoint
 
 Origin-binding alone, however, is not sufficient for canonical registration. Because `registerTool` is permissionless, any account can point a registration at a URL it does not control. An attacker who reads a legitimate creator's well-known URL can register that URL under the attacker's own address with a malicious predicate. Consumers fetching the manifest would see a genuine, origin-bound, hash-matching document, but access would be gated by the attacker's contract.
 
-Creator self-attestation (§5) closes this. The manifest declares which address is entitled to appear as the onchain `creator`, and consumers reject any registration whose onchain `creator` does not match.
+Creator self-attestation (§7) closes this. The manifest declares which address is entitled to appear as the onchain `creator`, and consumers reject any registration whose onchain `creator` does not match.
 
 Only the origin operator can write bytes at the well-known path, and those bytes are committed onchain via `manifestHash`, so the origin operator is the only party that can nominate a creator address. The two mechanisms together define a canonical registration: the manifest came from the endpoint's origin, its bytes match the onchain hash, and its declared creator matches the onchain creator. Every surface (wallets, agents, indexers) applies this rule and reaches the same answer, so consumers agree on which registration is authoritative without a trusted directory.
 
@@ -1151,7 +1188,7 @@ Implementations MUST reject `metadataURI` values longer than 2,048 bytes (UTF-8 
 
 Tool IDs are auto-incrementing counters, so there is no onchain name-squatting vector at the identifier layer. An attacker who front-runs a `registerTool` transaction obtains a different tool ID pointing to their own manifest, which does not affect the victim's subsequent registration.
 
-A distinct risk is URL-squatting: an attacker registers the legitimate creator's `metadataURI` and matching `manifestHash` under the attacker's own address, attaching a malicious `accessPredicate`. Origin-binding does not prevent this, because the attacker is merely referencing a URL that already exists at the real operator's origin. Creator binding (§5) closes this by requiring the manifest itself to declare the onchain address permitted to register it; a registration whose onchain `creator` does not match the manifest's `creatorAddress` MUST be rejected by consumers.
+A distinct risk is URL-squatting: an attacker registers the legitimate creator's `metadataURI` and matching `manifestHash` under the attacker's own address, attaching a malicious `accessPredicate`. Origin-binding does not prevent this, because the attacker is merely referencing a URL that already exists at the real operator's origin. Creator binding (§7) closes this by requiring the manifest itself to declare the onchain address permitted to register it; a registration whose onchain `creator` does not match the manifest's `creatorAddress` MUST be rejected by consumers.
 
 Manifest `name` collisions, where two independent creators pick the same human-readable name on different origins, are still resolved by the discovery layer (indexers, agent frameworks), not by the registry. Discovery layers SHOULD rank tools by origin-binding plus creator-binding verification rather than registration order.
 
@@ -1173,7 +1210,7 @@ Tool creators who define payment flows SHOULD document the replay-resistance mec
 
 ### Malicious Endpoints
 
-Tool endpoints are creator-controlled URLs. The `endpoint` field MUST be an `https://` URL (see §2); consumers MUST reject manifests whose `endpoint` uses any other scheme. Any consumer that may cause a tool to be invoked on a user's behalf (agent frameworks, wallets, invocation proxies, or any surface exposing a "run this tool" affordance, using the same scoping as the 24-hour cache ceiling in [§5 Handling Verification Failure](#handling-verification-failure)) MUST reject endpoints that resolve to private IP ranges (RFC 1918, RFC 6598, loopback, link-local, IPv6 ULA `fc00::/7`, IPv6 link-local `fe80::/10`) to prevent SSRF attacks against internal services, and MUST resolve the host immediately before each invocation rather than caching the resolution, to prevent DNS rebinding. Purely informational surfaces that never invoke endpoints (e.g., indexer digests, historical registries) MAY use SHOULD-level rejection but SHOULD NOT relax it without an explicit policy. Agent frameworks that invoke tool endpoints MUST enforce request timeouts and response size limits.
+Tool endpoints are creator-controlled URLs. The `endpoint` field MUST be an `https://` URL (see §2); consumers MUST reject manifests whose `endpoint` uses any other scheme. Any consumer that may cause a tool to be invoked on a user's behalf (agent frameworks, wallets, invocation proxies, or any surface exposing a "run this tool" affordance, using the same scoping as the 24-hour cache ceiling in [§7 Handling Verification Failure](#handling-verification-failure)) MUST reject endpoints that resolve to private IP ranges (RFC 1918, RFC 6598, loopback, link-local, IPv6 ULA `fc00::/7`, IPv6 link-local `fe80::/10`) to prevent SSRF attacks against internal services, and MUST resolve the host immediately before each invocation rather than caching the resolution, to prevent DNS rebinding. Purely informational surfaces that never invoke endpoints (e.g., indexer digests, historical registries) MAY use SHOULD-level rejection but SHOULD NOT relax it without an explicit policy. Agent frameworks that invoke tool endpoints MUST enforce request timeouts and response size limits.
 
 ### Predicate Introspection Hardening
 
@@ -1185,11 +1222,11 @@ Consumers MUST enforce the following ceilings on `getRequirements` return values
 | --- | --- | --- |
 | `requirements.length` | 256 entries | Sized to accommodate honest fan-out from real predicates: an `ERC1155OwnerPredicate` configured with 10 collections × 16 token IDs emits 160 requirements, and a 3-term `CompositePredicate` over such children flattens to 480 entries unless one branch is small. 256 covers the single-predicate ceiling and most realistic compositions; consumers needing a larger window MAY raise the cap, but MUST NOT fall back to "denied" for honest over-cap responses without surfacing the diagnostic. |
 | `data` byte length per entry | 4,096 bytes | Generous for any reasonable ABI-encoded payload; prevents quadratic-byte DoS at the agent-decode layer. |
-| `label` byte length per entry | 256 bytes | Matches the manifest `label` cap in [§Access](#access); discovery surfaces have a fixed display budget. |
+| `label` byte length per entry | 256 bytes | Matches the manifest `label` cap in [§Access](#4-access); discovery surfaces have a fixed display budget. |
 
 Consumers SHOULD also gas-cap the `getRequirements` staticcall (the same 200,000-gas ceiling as `hasAccess` is a reasonable default) and treat OOG as introspection-failed. The `kind` sentinel `0x00000000` defined in the [Rationale](#getrequirements-is-advisory--hasaccess-is-the-source-of-truth) for child-introspection failures applies to over-limit responses too: a composite predicate that wraps a child returning over-limit data SHOULD substitute the sentinel.
 
-The same defensive posture applies to the diagnostic `name()` views on both `IToolRegistry` and `IAccessPredicate`: returns are creator-controlled strings, so consumers MUST cap them at 256 bytes (matching the `label` cap in [§Access](#access)) and MUST treat over-limit returns as if the contract did not implement `name()`. This prevents a malicious predicate from grieving discovery surfaces with a multi-megabyte string in what consumers expect to be a cheap diagnostic call.
+The same defensive posture applies to the diagnostic `name()` views on both `IToolRegistry` and `IAccessPredicate`, and to `IToolRegistry.version()`: returns are deployer-controlled strings, so consumers MUST cap them at 256 bytes (matching the `label` cap in [§Access](#4-access)) and MUST treat over-limit returns as if the contract did not implement the function. This prevents a malicious registry or predicate from grieving discovery surfaces with a multi-megabyte string in what consumers expect to be a cheap diagnostic call.
 
 ### Manifest Parser Hardening
 
@@ -1199,8 +1236,12 @@ A creator controls the bytes served at `metadataURI`, and a permissionless regis
 | --- | --- | --- |
 | Manifest byte size | 1 MiB (1,048,576 bytes) | Bounds HTTP body and parser memory; a fully-populated honest manifest with ten pricing entries and a moderately rich schema is well under 10 KiB. Consumers MUST truncate at the limit and treat oversize fetches as a verification failure. |
 | `pricing.length` | 32 entries | Multi-chain, multi-protocol pricing still fits comfortably; prevents quadratic iteration in agent selection. |
+| `access.requirements.length` | 256 entries | Mirrors the onchain `getRequirements` ceiling in [Predicate Introspection Hardening](#predicate-introspection-hardening); two views of the same data should have the same bound so neither path is the soft underbelly. |
+| `access.requirements[].data` hex-decoded byte length | 4,096 bytes | Mirrors the onchain `data` cap (which is 4,096 binary bytes). The serialized hex string carrying this payload is up to 8,194 UTF-8 bytes (`0x` prefix + two hex digits per byte). Consumers SHOULD apply the cap to the decoded payload, not the raw hex string, so a manifest-side requirement can carry the same payload that would be legal onchain. |
 | `inputs` / `outputs` schema depth | 16 levels | Deep enough for any real JSON Schema composition (`anyOf` of tagged unions, nested objects); prevents stack exhaustion in recursive validators. |
 | `inputs` + `outputs` total schema nodes | 1,024 nodes | Covers rich schemas; prevents pathological fan-out attacks that create millions of subschemas via shallow-but-wide structures. |
+
+Each row above is an independent upper bound on its own axis; they do not jointly compose. The 1 MiB total-size cap is the binding constraint that limits the joint product. As a worked example, a manifest cannot simultaneously hit `access.requirements.length = 256` and per-entry `data = 4,096` decoded bytes: 256 maxed-out entries serialize to roughly 2.1 MiB of hex envelope (8,194 UTF-8 bytes per entry, plus label, kind, and JSON overhead), well over the 1 MiB ceiling. Consumers MUST enforce every row, but conformant manifests trade off depth for breadth and never hit every row at once.
 
 Regex `pattern` values inside embedded schemas MUST be evaluated by a matcher immune to catastrophic backtracking (e.g., RE2, or an implementation with a bounded step count). A matcher with exponential worst-case behavior on attacker input is unsafe and MUST NOT be used.
 
@@ -1290,7 +1331,7 @@ A contract-wallet creator whose authorization logic later becomes unreachable (s
 
 ### Manifest Freshness (`maxAge`)
 
-Consumers enforce their own freshness windows (see §5), but a tool creator may know that their manifest changes more frequently than the consumer's default window allows. Creators MAY include a `maxAge` field (integer, seconds) in the manifest to declare the maximum acceptable cache lifetime. When present, consumers SHOULD treat `maxAge` as an upper bound: a consumer whose own freshness policy is shorter than `maxAge` keeps its shorter window; a consumer whose policy is longer than `maxAge` SHOULD shorten it to `maxAge`. If `maxAge` is absent, the consumer's own policy applies unchanged.
+Consumers enforce their own freshness windows (see §7), but a tool creator may know that their manifest changes more frequently than the consumer's default window allows. Creators MAY include a `maxAge` field (integer, seconds) in the manifest to declare the maximum acceptable cache lifetime. When present, consumers SHOULD treat `maxAge` as an upper bound: a consumer whose own freshness policy is shorter than `maxAge` keeps its shorter window; a consumer whose policy is longer than `maxAge` SHOULD shorten it to `maxAge`. If `maxAge` is absent, the consumer's own policy applies unchanged.
 
 `maxAge` is not part of the formal manifest schema defined in §2; it is an informal convention recognized only by the Security Considerations section. A strict validator built solely from the §2 schema will ignore it per the "Unknown Fields and Extensions" rule. Consumers that wish to honor `maxAge` SHOULD look for it explicitly after schema validation.
 
@@ -1308,7 +1349,7 @@ The registry contract itself does not enforce registration fees or rate limits, 
 - **Staking and slashing.** An implementation MAY require creators to stake a bond at registration time, reclaimable after a cooldown period or upon `deregisterTool`. A governance or moderation mechanism MAY slash the stake for manifestly abusive registrations (e.g., manifests that serve malware). This pattern is more complex but provides a stronger deterrent than a one-time fee.
 - **Indexer-level filtering.** Discovery layers (indexers, agent frameworks, wallets) SHOULD apply reputation scoring independent of the registry contract. Indexers SHOULD deprioritize or hide tools that fail origin-binding, creator-binding, or manifest-hash verification. Indexers MAY additionally consider onchain signals (creator account age, transaction history, stake amount) and offchain signals (domain reputation, TLS certificate age, manifest quality) when ranking tools.
 
-Consumers MUST NOT rely on the absence of spam as a security property; all trust decisions MUST be based on the verification checks defined in §5, not on registry ordering or tool ID proximity.
+Consumers MUST NOT rely on the absence of spam as a security property; all trust decisions MUST be based on the verification checks defined in §7, not on registry ordering or tool ID proximity.
 
 This ERC provides two deactivation mechanisms with different trade-offs. `deregisterTool` is a permanent, irreversible onchain removal: it tombstones the tool ID so that all subsequent operations revert with `ToolIsDeregistered`, and the ID is never reused. Creators SHOULD use `deregisterTool` when a registration is compromised or must be permanently retired. Alternatively, a creator who wants a reversible pause SHOULD set `accessPredicate` to an always-deny predicate, which makes every subsequent `hasAccess` return `false` while preserving the `ToolConfig` for later re-enablement. Indexers and discovery layers SHOULD detect retired registrations heuristically (e.g., deregistered status, always-deny predicate, or no `ToolMetadataUpdated` events for an extended window) and surface them as "retired" rather than treating them as canonical. Consumers MUST NOT trust the absence of a deactivation signal as proof a registration is still endorsed by its creator; they SHOULD weigh `ToolRegistered` and `ToolMetadataUpdated` recency, the `creator`'s recent activity, and any out-of-band reputation signal when ranking tools.
 
