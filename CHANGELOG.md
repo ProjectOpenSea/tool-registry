@@ -1,5 +1,11 @@
 # @opensea/tool-registry
 
+## 0.1.2
+
+### Patch Changes
+
+- 23adad6: docs: simplify the ERC draft by ~7%. Folds the standalone Manifest Hex-Field Casing subsection into the Canonical Manifest Bytes bullet (the per-field grammar is already inline at each field's row); replaces duplicated semantic-input JSON in Appendix A with pointers to the §2 example manifests; collapses the Verifiability Trust Model bullet list (which restated §5 verbatim) into a single intro paragraph that cross-references §5; merges Registry Self-Reference and Predicate Selector Collision into Predicate Validation at Registration; trims `hasAccess`'s docstring to a single cross-reference for the strict ABI-bool decode rules. No normative rules changed, no regexes/caps/thresholds touched, no §-renumbering. Pinned `manifestHash` test vectors in Appendix A still verify.
+
 ## 0.1.1
 
 ### Patch Changes
