@@ -57,7 +57,7 @@ contract ERC1155OwnerPredicateTest is Test {
     address nonHolder = makeAddr("nonHolder");
     address stranger = makeAddr("stranger");
 
-    string constant META_URI = "https://api.opensea.io/.well-known/erc-draft/tools/1155-gate.json";
+    string constant META_URI = "https://api.opensea.io/.well-known/ai-tool/1155-gate.json";
     bytes32 constant MANIFEST_HASH = keccak256("manifest-v1");
     uint256 toolId;
 
@@ -352,9 +352,7 @@ contract ERC1155OwnerPredicateTest is Test {
 
         vm.prank(creator);
         uint256 toolId2 = registry.registerTool(
-            "https://api.opensea.io/.well-known/erc-draft/tools/other-1155.json",
-            keccak256("manifest-v2"),
-            address(predicate)
+            "https://api.opensea.io/.well-known/ai-tool/other-1155.json", keccak256("manifest-v2"), address(predicate)
         );
 
         assertTrue(predicate.hasAccess(toolId, holder, ""));
@@ -463,7 +461,7 @@ contract ERC1155OwnerPredicateIntegrationTest is Test {
     address creator = makeAddr("creator");
     address holder = makeAddr("holder");
     address nonHolder = makeAddr("nonHolder");
-    string constant META_URI = "https://api.opensea.io/.well-known/erc-draft/tools/1155-gate.json";
+    string constant META_URI = "https://api.opensea.io/.well-known/ai-tool/1155-gate.json";
     bytes32 constant MANIFEST_HASH = keccak256("manifest-v1");
 
     function setUp() public {

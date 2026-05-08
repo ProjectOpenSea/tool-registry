@@ -1,6 +1,6 @@
-# ERC-Draft Agent Tool Registry: Reference Implementation
+# ERC-8257 Agent Tool Registry: Reference Implementation
 
-Foundry reference implementation for the **ERC-Draft Agent Tool Registry**: a minimal onchain registry for AI agent tools with extensible predicate-based access control.
+Foundry reference implementation for the **ERC-8257 Agent Tool Registry**: a minimal onchain registry for AI agent tools with extensible predicate-based access control.
 
 Pairs with [`@opensea/tool-sdk`](https://github.com/ProjectOpenSea/tool-sdk) — the TypeScript SDK and CLI for authoring tool manifests, registering tools onchain, and gating tool endpoints against this registry.
 

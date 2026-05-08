@@ -44,7 +44,7 @@ contract ERC721OwnerPredicateTest is Test {
     address nonHolder = makeAddr("nonHolder");
     address stranger = makeAddr("stranger");
 
-    string constant META_URI = "https://api.opensea.io/.well-known/erc-draft/tools/holder-swaps.json";
+    string constant META_URI = "https://api.opensea.io/.well-known/ai-tool/holder-swaps.json";
     bytes32 constant MANIFEST_HASH = keccak256("manifest-v1");
     uint256 toolId;
 
@@ -277,9 +277,7 @@ contract ERC721OwnerPredicateTest is Test {
         // A different toolId with no collections configured should return false.
         vm.prank(creator);
         uint256 toolId2 = registry.registerTool(
-            "https://api.opensea.io/.well-known/erc-draft/tools/other.json",
-            keccak256("manifest-v2"),
-            address(predicate)
+            "https://api.opensea.io/.well-known/ai-tool/other.json", keccak256("manifest-v2"), address(predicate)
         );
 
         assertTrue(predicate.hasAccess(toolId, holder, ""));
@@ -372,7 +370,7 @@ contract ERC721OwnerPredicateIntegrationTest is Test {
     address creator = makeAddr("creator");
     address holder = makeAddr("holder");
     address nonHolder = makeAddr("nonHolder");
-    string constant META_URI = "https://api.opensea.io/.well-known/erc-draft/tools/holder-swaps.json";
+    string constant META_URI = "https://api.opensea.io/.well-known/ai-tool/holder-swaps.json";
     bytes32 constant MANIFEST_HASH = keccak256("manifest-v1");
 
     function setUp() public {
@@ -434,7 +432,7 @@ contract ERC721OwnerPredicateIntegrationTest is Test {
         vm.startPrank(creator);
         uint256 tool1 = registry.registerTool(META_URI, MANIFEST_HASH, address(predicate));
         uint256 tool2 = registry.registerTool(
-            "https://api.opensea.io/.well-known/erc-draft/tools/holder-tokens.json",
+            "https://api.opensea.io/.well-known/ai-tool/holder-tokens.json",
             keccak256("manifest-v2"),
             address(predicate)
         );
