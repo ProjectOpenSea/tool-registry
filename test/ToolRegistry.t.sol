@@ -607,7 +607,7 @@ contract ToolRegistryTest is Test {
     }
 
     function test_version() public view {
-        assertEq(registry.version(), "0.1");
+        assertEq(registry.version(), "0.2");
     }
 
     function test_supportsInterface_ERC165() public view {

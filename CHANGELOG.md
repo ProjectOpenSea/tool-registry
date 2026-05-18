@@ -1,5 +1,11 @@
 # @opensea/tool-registry
 
+## 0.2.0
+
+### Minor Changes
+
+- 427e093: Redeploy `ToolRegistry` + canonical predicates as v0.2 on Ethereum mainnet and Base. The v0.2 registry returns `version() == "0.2"` and accepts predicates that advertise IAccessPredicate interfaceId `0xbdf9dc18` (hasAccess + name + getRequirements). New canonical addresses (identical on chain 1 and 8453): `ToolRegistry` `0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1`; `ERC721OwnerPredicate` `0xc8721c9A776958FfFfEb602DA1b708bf1D318379`; `ERC1155OwnerPredicate` `0x77373Dc3c1AE9A1e937eF3e5E08F4807D47c7c11`. Pre-beta: the previous v0.1 Base deployment is no longer canonical — tools registered there must be re-registered.
+
 ## 0.1.2
 
 ### Patch Changes

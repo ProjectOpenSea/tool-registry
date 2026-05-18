@@ -23,8 +23,10 @@ contract ToolRegistry is IToolRegistry, ERC165 {
     ///      is comfortably under 400 bytes for any reasonable origin.
     uint256 private constant _MAX_METADATA_URI_LEN = 2048;
 
-    /// @dev Gas forwarded to a predicate's `hasAccess` staticcall. See the
-    ///      ERC's "Predicate Gas Consumption" security consideration.
+    /// @dev Gas forwarded to a predicate's `hasAccess` staticcall. Shipped as
+    ///      a defense-in-depth implementation choice; the ERC's "Predicate Gas
+    ///      Cost and Composition" security consideration no longer mandates a
+    ///      normative ceiling. Downstream consumers MAY pick a different value.
     uint256 private constant _PREDICATE_GAS_LIMIT = 200_000;
 
     /// @dev Gas forwarded to each `supportsInterface` probe during
@@ -120,7 +122,7 @@ contract ToolRegistry is IToolRegistry, ERC165 {
 
     /// @inheritdoc IToolRegistry
     function version() external pure returns (string memory) {
-        return "0.1";
+        return "0.2";
     }
 
     function hasAccess(uint256 toolId, address account, bytes calldata data) external view returns (bool) {

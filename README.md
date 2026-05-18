@@ -56,13 +56,15 @@ Reference predicates under `examples/` (not part of the canonical ERC). All mult
 
 `script/Deploy.s.sol` deploys `ToolRegistry`, `ERC721OwnerPredicate`, and `ERC1155OwnerPredicate` deterministically via the Arachnid keyless CREATE2 factory (pre-deployed at `0x4e59...956C` on every major chain). Re-running with the same salt is a no-op once the address is occupied; swapping in `_SALT` for a vanity salt later deploys the new address on chains that haven't seen it without disturbing existing chains.
 
-### Live addresses (beta, salt `bytes32(uint256(1))`)
+### Live addresses (pre-beta, salt `bytes32(uint256(1))`)
 
-| Contract | Base mainnet |
-|---|---|
-| `ToolRegistry` (v0.1) | [`0x7291BbFbC368C2D478eCe1eA30de31F612a34856`](https://basescan.org/address/0x7291bbfbc368c2d478ece1ea30de31f612a34856#code) |
-| `ERC721OwnerPredicate` (v0.2) | [`0xd1F703D0B90BB7106fAebBfbcAdD2B07BDc4c769`](https://basescan.org/address/0xd1f703d0b90bb7106faebbfbcadd2b07bdc4c769#code) |
-| `ERC1155OwnerPredicate` (v0.2) | [`0xc179b9d4D9B7ffe0CdA608134729f72003380A7e`](https://basescan.org/address/0xc179b9d4d9b7ffe0cda608134729f72003380a7e#code) |
+Canonical v0.2 deployments — same CREATE2 address on every supported chain.
+
+| Contract | Address | Chains |
+|---|---|---|
+| `ToolRegistry` (v0.2) | [`0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1`](https://etherscan.io/address/0x265bb2dbfc0a8165c9a1941eb1372f349bad2cf1#code) | Ethereum mainnet, Base |
+| `ERC721OwnerPredicate` (v0.2) | [`0xc8721c9A776958FfFfEb602DA1b708bf1D318379`](https://etherscan.io/address/0xc8721c9a776958ffffeb602da1b708bf1d318379#code) | Ethereum mainnet, Base |
+| `ERC1155OwnerPredicate` (v0.2) | [`0x77373Dc3c1AE9A1e937eF3e5E08F4807D47c7c11`](https://etherscan.io/address/0x77373dc3c1ae9a1e937ef3e5e08f4807d47c7c11#code) | Ethereum mainnet, Base |
 
 Each contract advertises its identity onchain via `name()` and `version()` (registry) or `name()` (predicates). See the EIP draft for the version-string format.
 
