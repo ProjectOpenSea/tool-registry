@@ -1,5 +1,11 @@
 # @opensea/tool-registry
 
+## 0.3.0
+
+### Minor Changes
+
+- 27a89da: Canonicalize `SubscriptionPredicate` v0.2 on Ethereum mainnet and Base. The predicate now ships in `script/Deploy.s.sol` at the deterministic CREATE2 address `0xCBe0cd9B1d99d95Baa9c58f2767246C52e461f25` (identical on chain 1 and 8453, deployed via the Arachnid factory with salt `bytes32(uint256(1))` and the v0.2 registry as constructor arg).
+
 ## 0.2.0
 
 ### Minor Changes
