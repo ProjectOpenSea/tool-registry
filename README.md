@@ -51,10 +51,19 @@ Reference predicates under `examples/` (not part of the canonical ERC). All mult
 | `ERC1155OwnerPredicate.sol` | Account owns ≥1 of any configured `(collection, tokenId)` pair across up to 10 ERC-1155 collections |
 | `SubscriptionPredicate.sol` | NFT-tier-with-expiration subscription model |
 | `CompositePredicate.sol` | Combines up to 3 leaf `IAccessPredicate` contracts under AND-all / OR-any with optional per-term negation, fail-closed on sub-call failure |
+| `TraitGatedPredicate.sol` | ERC-721 ownership + ERC-7496 dynamic trait value match. Supports a separate traits contract (e.g. a renderer). Configurable trait key and up to 32 allowed values per tool |
 
 ## Deploy
 
-`script/Deploy.s.sol` deploys `ToolRegistry`, `ERC721OwnerPredicate`, `ERC1155OwnerPredicate`, and `SubscriptionPredicate` deterministically via the Arachnid keyless CREATE2 factory (pre-deployed at `0x4e59...956C` on every major chain). Re-running with the same salt is a no-op once the address is occupied; swapping in `_SALT` for a vanity salt later deploys the new address on chains that haven't seen it without disturbing existing chains.
+`script/Deploy.s.sol` deploys `ToolRegistry`, `ERC721OwnerPredicate`, `ERC1155OwnerPredicate`, `SubscriptionPredicate`, and `TraitGatedPredicate` deterministically via the Arachnid keyless CREATE2 factory (pre-deployed at `0x4e59...956C` on every major chain). Re-running with the same salt is a no-op once the address is occupied; swapping in `_SALT` for a vanity salt later deploys the new address on chains that haven't seen it without disturbing existing chains.
+
+To deploy **only the TraitGatedPredicate** (without redeploying other contracts), use the standalone script:
+
+```bash
+REGISTRY=0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1 \
+NETWORKS=base forge script script/DeployTraitGatedPredicate.s.sol --sig "run()" -vvv \
+    --account beta-deployer --sender $DEPLOYER --broadcast --verify
+```
 
 ### Live addresses (pre-beta, salt `bytes32(uint256(1))`)
 
@@ -66,6 +75,7 @@ Canonical v0.2 deployments — same CREATE2 address on every supported chain.
 | `ERC721OwnerPredicate` (v0.2) | [`0xc8721c9A776958FfFfEb602DA1b708bf1D318379`](https://etherscan.io/address/0xc8721c9a776958ffffeb602da1b708bf1d318379#code) | Ethereum mainnet, Base |
 | `ERC1155OwnerPredicate` (v0.2) | [`0x77373Dc3c1AE9A1e937eF3e5E08F4807D47c7c11`](https://etherscan.io/address/0x77373dc3c1ae9a1e937ef3e5e08f4807d47c7c11#code) | Ethereum mainnet, Base |
 | `SubscriptionPredicate` (v0.2) | [`0xCBe0cd9B1d99d95Baa9c58f2767246C52e461f25`](https://etherscan.io/address/0xcbe0cd9b1d99d95baa9c58f2767246c52e461f25#code) | Ethereum mainnet, Base |
+| `TraitGatedPredicate` (v0.2) | [`0x10abF07CfA34Bf22372C57f27e8bd9C2DCF93fA1`](https://etherscan.io/address/0x10abf07cfa34bf22372c57f27e8bd9c2dcf93fa1#code) | Ethereum mainnet, Base |
 
 Each contract advertises its identity onchain via `name()` and `version()` (registry) or `name()` (predicates). See the EIP draft for the version-string format.
 

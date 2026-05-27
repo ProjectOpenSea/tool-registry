@@ -7,11 +7,13 @@ import {ToolRegistry} from "../src/ToolRegistry.sol";
 import {ERC721OwnerPredicate} from "../examples/ERC721OwnerPredicate.sol";
 import {ERC1155OwnerPredicate} from "../examples/ERC1155OwnerPredicate.sol";
 import {SubscriptionPredicate} from "../examples/SubscriptionPredicate.sol";
+import {TraitGatedPredicate} from "../examples/TraitGatedPredicate.sol";
 
 /// @title Deploy
 /// @notice Deterministic CREATE2 deployment of `ToolRegistry` and the example
 ///         `ERC721OwnerPredicate` / `ERC1155OwnerPredicate` /
-///         `SubscriptionPredicate` predicates via the Arachnid keyless factory.
+///         `SubscriptionPredicate` / `TraitGatedPredicate` predicates via the
+///         Arachnid keyless factory.
 /// @dev Deploys are idempotent: re-running with the same salt is a no-op once
 ///      the address is occupied. Swap `_SALT` for a vanity salt later and
 ///      re-run — the script will deploy at the new address on chains that
@@ -51,5 +53,10 @@ contract Deploy is BaseCreate2Script {
             abi.encodePacked(type(SubscriptionPredicate).creationCode, abi.encode(registryAddr));
         address predicateSubscription = _create2IfNotDeployed(deployer, _SALT, predicateSubscriptionInitCode);
         console2.log("SubscriptionPredicate:  ", predicateSubscription);
+
+        bytes memory predicateTraitInitCode =
+            abi.encodePacked(type(TraitGatedPredicate).creationCode, abi.encode(registryAddr));
+        address predicateTrait = _create2IfNotDeployed(deployer, _SALT, predicateTraitInitCode);
+        console2.log("TraitGatedPredicate:    ", predicateTrait);
     }
 }

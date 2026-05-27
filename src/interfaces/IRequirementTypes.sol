@@ -23,3 +23,9 @@ interface IERC1155Holding {
 interface ISubscription {
     function subscription() external;
 }
+
+/// @dev kind for ERC-7496 dynamic trait requirements.
+///      data = abi.encode(address collection, address traitsContract, bytes32 traitKey, bytes32[] allowedValues)
+interface IERC7496Trait {
+    function erc7496Trait() external;
+}
