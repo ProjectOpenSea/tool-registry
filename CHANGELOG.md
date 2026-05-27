@@ -1,5 +1,11 @@
 # @opensea/tool-registry
 
+## 0.4.0
+
+### Minor Changes
+
+- 0c28091: Add `TraitGatedPredicate` for ERC-7496 dynamic trait gating. The predicate combines ERC-721 ownership with an on-chain trait value match, supports a separate traits contract (e.g. a renderer), and allows a configurable trait key with up to 32 allowed values per tool. It ships in `script/Deploy.s.sol` and a standalone `script/DeployTraitGatedPredicate.s.sol`, and is deployed deterministically via the Arachnid CREATE2 factory at the canonical address `0x10abF07CfA34Bf22372C57f27e8bd9C2DCF93fA1` on Ethereum mainnet and Base.
+
 ## 0.3.0
 
 ### Minor Changes
