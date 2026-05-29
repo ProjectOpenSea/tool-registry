@@ -52,6 +52,7 @@ Reference predicates under `examples/` (not part of the canonical ERC). All mult
 | `SubscriptionPredicate.sol` | NFT-tier-with-expiration subscription model |
 | `CompositePredicate.sol` | Combines up to 3 leaf `IAccessPredicate` contracts under AND-all / OR-any with optional per-term negation, fail-closed on sub-call failure |
 | `TraitGatedPredicate.sol` | ERC-721 ownership + ERC-7496 dynamic trait value match. Supports a separate traits contract (e.g. a renderer). Configurable trait key and up to 32 allowed values per tool |
+| `ERC20BalancePredicate.sol` | Account holds ≥ configurable `minBalance` of a specified ERC-20 token (`balanceOf >= minBalance`) |
 
 ## Deploy
 
@@ -65,17 +66,26 @@ NETWORKS=base forge script script/DeployTraitGatedPredicate.s.sol --sig "run()" 
     --account beta-deployer --sender $DEPLOYER --broadcast --verify
 ```
 
+To deploy **only the ERC20BalancePredicate**:
+
+```bash
+REGISTRY=0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1 \
+NETWORKS=base forge script script/DeployERC20BalancePredicate.s.sol --sig "run()" -vvv \
+    --account beta-deployer --sender $DEPLOYER --broadcast --verify
+```
+
 ### Live addresses (pre-beta, salt `bytes32(uint256(1))`)
 
 Canonical v0.2 deployments — same CREATE2 address on every supported chain.
 
 | Contract | Address | Chains |
 |---|---|---|
-| `ToolRegistry` (v0.2) | [`0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1`](https://etherscan.io/address/0x265bb2dbfc0a8165c9a1941eb1372f349bad2cf1#code) | Ethereum mainnet, Base |
-| `ERC721OwnerPredicate` (v0.2) | [`0xc8721c9A776958FfFfEb602DA1b708bf1D318379`](https://etherscan.io/address/0xc8721c9a776958ffffeb602da1b708bf1d318379#code) | Ethereum mainnet, Base |
-| `ERC1155OwnerPredicate` (v0.2) | [`0x77373Dc3c1AE9A1e937eF3e5E08F4807D47c7c11`](https://etherscan.io/address/0x77373dc3c1ae9a1e937ef3e5e08f4807d47c7c11#code) | Ethereum mainnet, Base |
-| `SubscriptionPredicate` (v0.2) | [`0xCBe0cd9B1d99d95Baa9c58f2767246C52e461f25`](https://etherscan.io/address/0xcbe0cd9b1d99d95baa9c58f2767246c52e461f25#code) | Ethereum mainnet, Base |
-| `TraitGatedPredicate` (v0.2) | [`0x10abF07CfA34Bf22372C57f27e8bd9C2DCF93fA1`](https://etherscan.io/address/0x10abf07cfa34bf22372c57f27e8bd9c2dcf93fa1#code) | Ethereum mainnet, Base |
+| `ToolRegistry` (v0.2) | [`0x265BB2DBFC0A8165C9A1941Eb1372F349baD2cf1`](https://etherscan.io/address/0x265bb2dbfc0a8165c9a1941eb1372f349bad2cf1#code) | Ethereum mainnet, Base, Shape, Abstract |
+| `ERC721OwnerPredicate` (v0.2) | [`0xc8721c9A776958FfFfEb602DA1b708bf1D318379`](https://etherscan.io/address/0xc8721c9a776958ffffeb602da1b708bf1d318379#code) | Ethereum mainnet, Base, Shape, Abstract |
+| `ERC1155OwnerPredicate` (v0.2) | [`0x77373Dc3c1AE9A1e937eF3e5E08F4807D47c7c11`](https://etherscan.io/address/0x77373dc3c1ae9a1e937ef3e5e08f4807d47c7c11#code) | Ethereum mainnet, Base, Shape, Abstract |
+| `SubscriptionPredicate` (v0.2) | [`0xCBe0cd9B1d99d95Baa9c58f2767246C52e461f25`](https://etherscan.io/address/0xcbe0cd9b1d99d95baa9c58f2767246c52e461f25#code) | Ethereum mainnet, Base, Shape, Abstract |
+| `TraitGatedPredicate` (v0.2) | [`0x10abF07CfA34Bf22372C57f27e8bd9C2DCF93fA1`](https://etherscan.io/address/0x10abf07cfa34bf22372c57f27e8bd9c2dcf93fa1#code) | Ethereum mainnet, Base, Shape, Abstract |
+| `ERC20BalancePredicate` (v0.2) | [`0x1a834FC48B5f6e119c62C12a98b32137bCFA77cD`](https://etherscan.io/address/0x1a834fc48b5f6e119c62c12a98b32137bcfa77cd#code) | Ethereum mainnet, Base, Shape, Abstract |
 
 Each contract advertises its identity onchain via `name()` and `version()` (registry) or `name()` (predicates). See the EIP draft for the version-string format.
 

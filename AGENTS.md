@@ -45,9 +45,10 @@ When reviewing changes to this package, verify:
    - Solidity interfaces (`src/interfaces/`) ↔ TypeScript ABIs (`../tool-sdk/src/lib/onchain/abis.ts`)
    - Deployed addresses in `README.md` ↔ `../tool-sdk/src/lib/onchain/chains.ts`
    - Every function in the Solidity interface should have a corresponding entry in the TypeScript ABI
-   - Requirement-type selectors in `src/interfaces/IRequirementTypes.sol` ↔ `kind` values in `../tool-sdk/SKILLS.md` "Known Predicates" section
-   - Deployed predicate addresses in `README.md` ↔ `../tool-sdk/SKILLS.md` "Deployed Contracts" table
-   - New predicates added to `examples/` must get a corresponding entry in `../tool-sdk/SKILLS.md`
+   - Requirement-type selectors in `src/interfaces/IRequirementTypes.sol` ↔ `kind` values in `../tool-sdk/skill/references/known-predicates.md`
+   - Deployed predicate addresses in `README.md` ↔ `../tool-sdk/skill/SKILL.md` "Deployed Contracts" table and `../tool-sdk/skill/references/known-predicates.md`
+   - New predicates added to `examples/` must get a corresponding entry in `../tool-sdk/skill/references/known-predicates.md`
+   - **Deploying to a new chain**: add the chain ID to `foundry.toml` (`[rpc_endpoints]` + `[etherscan]`), the `README.md` "Chains" column, every `Deployment.chains` array in `../tool-sdk/src/lib/onchain/chains.ts`, and every prose chain enumeration in the skill docs / `predicate-gating-guide.md`. See `../tool-sdk/AGENTS.md` checklist item 2 for the full list. Abstract (2741) is a ZK Stack chain but is EVM-equivalent, so CREATE2 resolves the canonical addresses with no `chains.ts` `overrides` needed — confirm with a `forge script` dry-run that predicted addresses match before broadcasting.
 
 3. **Access control on state-mutating functions**: Only the tool creator should be able to call `updateToolMetadata`, `setAccessPredicate`, and predicate configuration functions like `setCollections`. Verify `NotToolCreator` / creator checks exist.
 

@@ -15,7 +15,11 @@ bracket_spacing = false
 [rpc_endpoints]
 base = "${BASE_RPC_URL}"
 mainnet = "${MAINNET_RPC_URL}"
+abstract = "${ABSTRACT_RPC_URL}"
+shape = "${SHAPE_RPC_URL}"
 
 [etherscan]
 base = {key = "${ETHERSCAN_API_KEY}", chain = 8453}
 mainnet = {key = "${ETHERSCAN_API_KEY}", chain = 1}
+abstract = {key = "${ETHERSCAN_API_KEY}", chain = 2741}
+shape = {key = "${ETHERSCAN_API_KEY}", chain = 360}

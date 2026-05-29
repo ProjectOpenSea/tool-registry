@@ -29,3 +29,9 @@ interface ISubscription {
 interface IERC7496Trait {
     function erc7496Trait() external;
 }
+
+/// @dev kind for ERC-20 balance requirements.
+///      data = abi.encode(address token, uint256 minBalance)
+interface IERC20Balance {
+    function erc20Balance() external;
+}
