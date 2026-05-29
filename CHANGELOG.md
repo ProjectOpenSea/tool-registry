@@ -1,5 +1,13 @@
 # @opensea/tool-registry
 
+## 0.5.0
+
+### Minor Changes
+
+- 1ce2300: Add `ERC20BalancePredicate` for ERC-20 token-balance-gated tool access. Ships a standalone `examples/ERC20BalancePredicate.sol`, a `script/DeployERC20BalancePredicate.s.sol` deploy script, the new `ERC20Balance` requirement type in `IRequirementTypes.sol`, and full test coverage.
+- ad8cf93: Set the canonical `ERC20BalancePredicate` address (`0x1a834FC48B5f6e119c62C12a98b32137bCFA77cD`) on Ethereum mainnet and Base.
+- f1636af: Deploy `ToolRegistry` and all five canonical predicates to Shape (chain 360) and Abstract (chain 2741) via deterministic CREATE2, at addresses identical to the existing Ethereum mainnet and Base deployments. Adds Shape and Abstract RPC configuration to `foundry.toml` and `.env.example`.
+
 ## 0.4.0
 
 ### Minor Changes
