@@ -48,6 +48,8 @@ const FREE_TOOL: Manifest = {
     },
   },
   version: "1.0.0",
+  image: "https://tools.example.com/nft-price-oracle/icon.png",
+  featuredImage: "https://tools.example.com/nft-price-oracle/featured.png",
   tags: ["nft", "pricing", "oracle"],
   creatorAddress: "0xabcdefabcdef1234567890abcdefabcdef123456",
 }

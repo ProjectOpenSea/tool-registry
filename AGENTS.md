@@ -22,15 +22,15 @@ Formatter: 120 char line width, 4-space tabs, no bracket spacing.
 |------|------|
 | `src/interfaces/IToolRegistry.sol` | Canonical interface — all public functions the registry exposes |
 | `src/interfaces/IAccessPredicate.sol` | Predicate interface — `hasAccess()` + `name()` |
-| `src/interfaces/IRequirementTypes.sol` | Requirement-type selectors (`IERC721Holding`, `IERC1155Holding`, `ISubscription`) for predicate `kind` values |
+| `src/interfaces/IRequirementTypes.sol` | Requirement-type selectors (`IERC721Holding`, `IERC1155Holding`, `ISubscription`, `IERC7496Trait`, `IERC20Balance`) for predicate `kind` values |
 | `src/ToolRegistry.sol` | Reference implementation |
-| `examples/` | Canonical predicate implementations (ERC721, ERC1155, Subscription, Composite) |
+| `examples/` | Canonical predicate implementations (ERC721, ERC1155, Subscription, Composite, TraitGated, ERC20Balance) |
 | `test/` | Foundry tests; mocks live in `test/mocks/` for edge-case predicate behavior |
 | `script/Deploy.s.sol` | Deterministic CREATE2 deployment script |
 | `scripts/generate-test-vectors.ts` | TypeScript helper to produce ABI-encoded test inputs (its own pnpm project) |
 | `scripts/check-abi-sync.sh` | CI script verifying TypeScript ABIs in `tool-sdk` match Forge build output |
 | ERC-8257 spec (currently in review: https://github.com/ethereum/ERCs/pull/1723) | Standard — code must mirror its interface IDs and behavior |
-| `lib/` | Foundry dependencies via git submodules (forge-std, OpenZeppelin, create2-helpers) |
+| `lib/` | Foundry dependencies via git submodules (forge-std, OpenZeppelin, create2-helpers, shipyard-core) |
 
 ## Review Checklist
 

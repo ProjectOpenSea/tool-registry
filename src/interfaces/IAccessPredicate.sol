@@ -3,8 +3,6 @@ pragma solidity ^0.8.24;
 
 /// @notice A single machine-readable access requirement.
 /// @param kind  ERC-165-style 4-byte identifier for the requirement type.
-///              Anyone defining a new predicate publishes a new
-///              `IRequirementType` interface and uses its `interfaceId`.
 /// @param data  ABI-encoded payload whose layout is determined by `kind`.
 /// @param label Human-readable hint (e.g. "Chonks on Base").
 struct AccessRequirement {
@@ -21,11 +19,14 @@ enum RequirementLogic {
 
 /// @title IAccessPredicate
 /// @notice Three-function interface for tool access gating.
-/// @dev Predicates MAY implement ERC-165. Those that do MUST return true for
-///      the IAccessPredicate interface ID. The registry uses ERC-165 as a
-///      best-effort misconfiguration check but does not require predicates
-///      to support it.
+/// @dev Anyone can implement this to create custom access logic
+///      (NFT gating, allowlists, staking requirements, subscriptions, etc.).
 interface IAccessPredicate {
+    /// @notice Check whether an account has access to a tool.
+    /// @param toolId  The tool being accessed.
+    /// @param account The account requesting access.
+    /// @param data    Opaque context bytes (e.g., tokenId, proof, signature).
+    /// @return Whether access is granted.
     function hasAccess(uint256 toolId, address account, bytes calldata data) external view returns (bool);
 
     /// @notice Returns a human-readable identifier for the predicate
@@ -40,8 +41,13 @@ interface IAccessPredicate {
     /// @notice Returns machine-readable access requirements for a tool so
     ///         agents can programmatically discover what it takes to pass.
     /// @dev The `kind` field uses ERC-165-style 4-byte IDs to keep the
-    ///      namespace open. Known kinds include IERC721Holding, IERC1155Holding,
-    ///      and ISubscription interface IDs.
+    ///      namespace open — anyone defining a new predicate publishes a new
+    ///      marker interface and computes its 4-byte `interfaceId`. Known
+    ///      kinds include `IERC721Holding`, `IERC1155Holding`, and
+    ///      `ISubscription` interface IDs.
+    /// @param toolId The tool to inspect.
+    /// @return requirements Array of requirements the caller must satisfy.
+    /// @return logic Whether requirements are combined with AND or OR.
     function getRequirements(uint256 toolId)
         external
         view

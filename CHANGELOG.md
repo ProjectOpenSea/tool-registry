@@ -1,5 +1,12 @@
 # @opensea/tool-registry
 
+## 0.6.0
+
+### Minor Changes
+
+- 867dc93: Add Monad (chain 143) deploy configuration: Monad RPC endpoint and Etherscan verifier settings in `foundry.toml` and the matching `.env.example` entry. The canonical `ToolRegistry` and predicate CREATE2 addresses are identical on Monad.
+- 05b370a: Document Monad (143) in the deployed-address tables in the README.
+
 ## 0.5.0
 
 ### Minor Changes

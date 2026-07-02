@@ -8,18 +8,21 @@ pragma solidity ^0.8.24;
 
 /// @dev kind for ERC-721 holding requirements.
 ///      data = abi.encode(address collection)
+///      interfaceId = 0xbdf8c428
 interface IERC721Holding {
     function erc721Holding() external;
 }
 
 /// @dev kind for ERC-1155 holding requirements.
 ///      data = abi.encode(address collection, uint256 tokenId)
+///      interfaceId = 0xcb429230
 interface IERC1155Holding {
     function erc1155Holding() external;
 }
 
 /// @dev kind for subscription requirements.
 ///      data = abi.encode(address collection, uint8 minTier)
+///      interfaceId = 0x44387cc2
 interface ISubscription {
     function subscription() external;
 }
