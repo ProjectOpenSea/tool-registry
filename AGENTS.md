@@ -26,7 +26,9 @@ Formatter: 120 char line width, 4-space tabs, no bracket spacing.
 | `src/ToolRegistry.sol` | Reference implementation |
 | `examples/` | Canonical predicate implementations (ERC721, ERC1155, Subscription, Composite, TraitGated, ERC20Balance) |
 | `test/` | Foundry tests; mocks live in `test/mocks/` for edge-case predicate behavior |
-| `script/Deploy.s.sol` | Deterministic CREATE2 deployment script |
+| `script/Deploy.s.sol` | Deterministic CREATE2 deployment script (registry + core predicates) |
+| `script/DeployTraitGatedPredicate.s.sol` | Standalone deploy script for TraitGatedPredicate |
+| `script/DeployERC20BalancePredicate.s.sol` | Standalone deploy script for ERC20BalancePredicate |
 | `scripts/generate-test-vectors.ts` | TypeScript helper to produce ABI-encoded test inputs (its own pnpm project) |
 | `scripts/check-abi-sync.sh` | CI script verifying TypeScript ABIs in `tool-sdk` match Forge build output |
 | ERC-8257 spec (currently in review: https://github.com/ethereum/ERCs/pull/1723) | Standard — code must mirror its interface IDs and behavior |

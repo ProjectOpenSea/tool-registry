@@ -18,10 +18,18 @@ mainnet = "${MAINNET_RPC_URL}"
 abstract = "${ABSTRACT_RPC_URL}"
 shape = "${SHAPE_RPC_URL}"
 monad = "${MONAD_RPC_URL}"
+robinhood = "${ROBINHOOD_RPC_URL}"
 
 [etherscan]
 base = {key = "${ETHERSCAN_API_KEY}", chain = 8453}
 mainnet = {key = "${ETHERSCAN_API_KEY}", chain = 1}
 abstract = {key = "${ETHERSCAN_API_KEY}", chain = 2741}
 shape = {key = "${ETHERSCAN_API_KEY}", chain = 360}
-monad = {key = "${ETHERSCAN_API_KEY}", chain = 143}
+# Monad (143) is on the Etherscan v2 API but not in forge's built-in chain
+# list, so the endpoint must be spelled out. Without a `url`, config
+# resolution fails during `--verify` and aborts verification for every chain
+# in the run.
+monad = {key = "${ETHERSCAN_API_KEY}", chain = 143, url = "https://api.etherscan.io/v2/api?chainid=143"}
+# Robinhood Chain (4663) is not on the Etherscan v2 API; verify via its Blockscout
+# instance, which exposes an Etherscan-compatible endpoint (key is ignored).
+robinhood = {key = "${BLOCKSCOUT_API_KEY}", chain = 4663, url = "https://robinhoodchain.blockscout.com/api"}

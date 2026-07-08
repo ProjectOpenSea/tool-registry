@@ -1,0 +1,14 @@
+{
+  "lib/create2-helpers": {
+    "rev": "63f72075ee83f82e7066cb7a27f95ab5ca775e65"
+  },
+  "lib/forge-std": {
+    "rev": "1eea5bae12ae557d589f9f0f0edae2faa47cb262"
+  },
+  "lib/openzeppelin-contracts": {
+    "rev": "69c8def5f222ff96f2b5beff05dfba996368aa79"
+  },
+  "lib/shipyard-core": {
+    "rev": "bb6a9a2ec2391369e9cbcd6e23fe435d04bd382e"
+  }
+}

@@ -1,5 +1,16 @@
 # @opensea/tool-registry
 
+## 0.7.0
+
+### Minor Changes
+
+- 9c287bc: Add Robinhood Chain (4663) deploy configuration: Robinhood RPC endpoint and Etherscan verifier settings in `foundry.toml` and the matching `.env.example` entry. The canonical `ToolRegistry` and predicate CREATE2 addresses are identical on Robinhood.
+- f1db520: Document Robinhood Chain (4663) in the deployed-address tables in the README.
+
+### Patch Changes
+
+- ac4ac6f: Add an explicit Etherscan v2 `url` to the `monad` entry in `foundry.toml`. Forge's built-in chain list doesn't know chain 143, so config resolution failed during `forge script --verify` and aborted verification for every chain in the run (including Robinhood).
+
 ## 0.6.0
 
 ### Minor Changes
