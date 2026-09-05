@@ -118,3 +118,7 @@ The deploy script reads `NETWORKS` (comma-separated keys from `[rpc_endpoints]` 
 - [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts): ERC-165
 - [Forge Std](https://github.com/foundry-rs/forge-std): testing utilities
 - [create2-helpers](https://github.com/emo-eth/create2-helpers): CREATE2 deploy script base
+
+## Security
+
+Found a vulnerability? Report it through OpenSea's Bugcrowd program at https://bugcrowd.com/engagements/opensea rather than opening a public issue. See [SECURITY.md](SECURITY.md).
