@@ -1,5 +1,11 @@
 # @opensea/tool-registry
 
+## 0.7.1
+
+### Patch Changes
+
+- Verify Robinhood Chain (4663) contracts through the Etherscan v2 API (`chainid=4663`, `ETHERSCAN_API_KEY`) instead of Blockscout. Etherscan v2 now lists the chain, and `BLOCKSCOUT_API_KEY` is gone from `.env.example`.
+
 ## 0.7.0
 
 ### Minor Changes

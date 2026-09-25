@@ -30,6 +30,6 @@ shape = {key = "${ETHERSCAN_API_KEY}", chain = 360}
 # resolution fails during `--verify` and aborts verification for every chain
 # in the run.
 monad = {key = "${ETHERSCAN_API_KEY}", chain = 143, url = "https://api.etherscan.io/v2/api?chainid=143"}
-# Robinhood Chain (4663) is not on the Etherscan v2 API; verify via its Blockscout
-# instance, which exposes an Etherscan-compatible endpoint (key is ignored).
-robinhood = {key = "${BLOCKSCOUT_API_KEY}", chain = 4663, url = "https://robinhoodchain.blockscout.com/api"}
+# Robinhood Chain (4663) is also missing from forge's built-in chain list, so it
+# needs the same explicit Etherscan v2 `url` as monad.
+robinhood = {key = "${ETHERSCAN_API_KEY}", chain = 4663, url = "https://api.etherscan.io/v2/api?chainid=4663"}
