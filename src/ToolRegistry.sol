@@ -23,10 +23,10 @@ contract ToolRegistry is IToolRegistry, ERC165 {
     ///      is comfortably under 400 bytes for any reasonable origin.
     uint256 private constant _MAX_METADATA_URI_LEN = 2048;
 
-    /// @dev Gas forwarded to a predicate's `hasAccess` staticcall. Shipped as
-    ///      a defense-in-depth implementation choice; the ERC's "Predicate Gas
-    ///      Cost and Composition" security consideration no longer mandates a
-    ///      normative ceiling. Downstream consumers MAY pick a different value.
+    /// @dev Gas forwarded to a predicate's `hasAccess` staticcall. A
+    ///      defense-in-depth choice of this implementation: the ERC's
+    ///      "Predicate Gas Cost and Composition" security consideration does
+    ///      not mandate a ceiling. Downstream consumers MAY pick another value.
     uint256 private constant _PREDICATE_GAS_LIMIT = 200_000;
 
     /// @dev Gas forwarded to each `supportsInterface` probe during
@@ -81,11 +81,9 @@ contract ToolRegistry is IToolRegistry, ERC165 {
         if (newHash == bytes32(0)) revert InvalidManifestHash();
 
         ToolConfig storage tool = _tools[toolId];
-        // The cheap length comparison short-circuits before reading and
-        // hashing the stored URI. Short URIs (<=31 bytes) live in a single
-        // slot, but the length cap permits strings that span many
-        // keccak-derived storage slots; skipping the hash read when the
-        // length already differs is the cheap path.
+        // Compare lengths first so a mismatch skips reading and hashing the
+        // stored URI. Short URIs (<=31 bytes) fit in one slot, but the length
+        // cap allows strings that span many keccak-derived storage slots.
         bool uriChanged =
             bytes(tool.metadataURI).length != uriLen || keccak256(bytes(tool.metadataURI)) != keccak256(bytes(newURI));
         if (uriChanged || tool.manifestHash != newHash) {

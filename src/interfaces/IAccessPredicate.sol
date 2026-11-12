@@ -41,10 +41,11 @@ interface IAccessPredicate {
     /// @notice Returns machine-readable access requirements for a tool so
     ///         agents can programmatically discover what it takes to pass.
     /// @dev The `kind` field uses ERC-165-style 4-byte IDs to keep the
-    ///      namespace open — anyone defining a new predicate publishes a new
-    ///      marker interface and computes its 4-byte `interfaceId`. Known
-    ///      kinds include `IERC721Holding`, `IERC1155Holding`, and
-    ///      `ISubscription` interface IDs.
+    ///      namespace open: anyone defining a new predicate publishes a new
+    ///      marker interface and computes its 4-byte `interfaceId`.
+    ///      `IRequirementTypes.sol` defines the `IERC721Holding`,
+    ///      `IERC1155Holding`, `ISubscription`, `IERC7496Trait`, and
+    ///      `IERC20Balance` kinds.
     /// @param toolId The tool to inspect.
     /// @return requirements Array of requirements the caller must satisfy.
     /// @return logic Whether requirements are combined with AND or OR.

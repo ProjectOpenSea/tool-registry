@@ -26,11 +26,11 @@ import {IToolRegistry} from "../src/interfaces/IToolRegistry.sol";
 ///      with enough headroom for leaf predicates that themselves make
 ///      cross-contract calls (e.g. `ERC721OwnerPredicate` looping
 ///      `balanceOf` over multiple cold collections). Compositions of more than
-///      three terms are deliberately out of scope for this example — express
+///      three terms are out of scope for this example. Express
 ///      them by nesting another `CompositePredicate` as a leaf, or by writing
 ///      a bespoke predicate.
 ///
-///      The same `data` is forwarded to every term — per-term `data` routing
+///      The same `data` is forwarded to every term. Per-term `data` routing
 ///      is out of scope for this example. Self-reference is rejected at
 ///      configuration time to keep evaluation bounded; cycles via other
 ///      composite predicates are still possible but require deliberate setup.
@@ -147,8 +147,8 @@ contract CompositePredicate is IAccessPredicate, ERC165 {
     ///         `false`. The same `data` is forwarded to every term.
     /// @dev Each term is `staticcall`ed with `_PER_TERM_GAS_LIMIT` gas and a
     ///      strict ABI-bool decode (32-byte word, value 0 or 1). On any
-    ///      failure — call revert, out-of-gas, oversize / undersize
-    ///      returndata, or non-canonical bool — the term result is treated
+    ///      failure (call revert, out-of-gas, oversize or undersize
+    ///      returndata, or a non-canonical bool) the term result is treated
     ///      as `false` before `negate` is applied. Short-circuits on the
     ///      first decisive result.
     function hasAccess(uint256 toolId, address account, bytes calldata data) external view override returns (bool) {

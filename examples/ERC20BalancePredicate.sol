@@ -10,8 +10,8 @@ import {IToolRegistry} from "../src/interfaces/IToolRegistry.sol";
 /// @title ERC20BalancePredicate
 /// @notice IAccessPredicate that gates tool access on holding a configurable
 ///         minimum balance of an ERC-20 token. The tool creator specifies:
-///         - `token` — the ERC-20 contract address
-///         - `minBalance` — the minimum `balanceOf` required for access
+///         - `token`: the ERC-20 contract address
+///         - `minBalance`: the minimum `balanceOf` required for access
 /// @dev Multi-tenant: one deployment per chain, configured per `toolId`.
 ///      The `data` argument to `hasAccess` is unused.
 contract ERC20BalancePredicate is IAccessPredicate, ERC165 {
