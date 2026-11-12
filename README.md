@@ -1,9 +1,5 @@
 # ERC-8257 Agent Tool Registry: Reference Implementation
 
-> **Read-only mirror.** This package is developed in a private monorepo and mirrored to [ProjectOpenSea/tool-registry](https://github.com/ProjectOpenSea/tool-registry) when a version is released, so the public code can trail the internal main branch by weeks.
->
-> Pull requests opened on the mirror cannot be merged there. They are read, and a fix worth taking is recreated in the monorepo. Because a fix that has landed internally is not public until the next release, filing an issue before writing a patch is the quickest way to find out whether a bug is already fixed.
-
 Foundry reference implementation for the **ERC-8257 Agent Tool Registry**: a minimal onchain registry for AI agent tools with extensible predicate-based access control.
 
 Pairs with [`@opensea/tool-sdk`](https://github.com/ProjectOpenSea/tool-sdk) — the TypeScript SDK and CLI for authoring tool manifests, registering tools onchain, and gating tool endpoints against this registry.
@@ -118,6 +114,10 @@ The deploy script reads `NETWORKS` (comma-separated keys from `[rpc_endpoints]` 
 - [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts): ERC-165
 - [Forge Std](https://github.com/foundry-rs/forge-std): testing utilities
 - [create2-helpers](https://github.com/emo-eth/create2-helpers): CREATE2 deploy script base
+
+## Contributing
+
+Read-only mirror of a private monorepo, updated on each release. Pull requests are welcome, and we bring accepted changes into the monorepo.
 
 ## Security
 
